@@ -43,7 +43,7 @@ from pymilvus.exceptions import MilvusUnavailableException
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 from langchain_core.documents import Document
 from src.chains import UnstructuredRAG
-from src.apply_configuration import ApplyConfigurationRequest, deploy_vllm_server, deploy_vllm_local, ensure_ssh_key_exists, test_ssh_connection
+from src.apply_configuration import ApplyConfigurationRequest, deploy_vllm_local
 
 from .utils import (
     get_config,
@@ -1379,97 +1379,6 @@ async def get_available_models(request: Request) -> JSONResponse:
 
 
 @app.post(
-    "/test-ssh-connection",
-    tags=["vGPU Configuration APIs"],
-    responses={
-        200: {
-            "description": "SSH connection test result",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "success": True,
-                        "message": "SSH connection successful",
-                        "key_path": "~/.ssh/vgpu_sizing_advisor"
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "SSH setup required",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "success": False,
-                        "message": "SSH key authentication failed",
-                        "setup_instructions": "Run: ssh-copy-id -i ~/.ssh/vgpu_sizing_advisor.pub user@host"
-                    }
-                }
-            }
-        }
-    },
-)
-async def test_ssh_connection_endpoint(request: Request, config_request: ApplyConfigurationRequest) -> JSONResponse:
-    """Test SSH connection to verify key-based authentication is set up."""
-    
-    if metrics:
-        metrics.update_api_requests(method=request.method, endpoint=request.url.path)
-    
-    try:
-        host = config_request.vm_ip
-        username = config_request.username
-        password = config_request.password
-        port = getattr(config_request, 'ssh_port', 22)
-        
-        # Ensure SSH key exists
-        key_exists, key_path, key_msg = await ensure_ssh_key_exists()
-        
-        if not key_exists:
-            return JSONResponse(
-                content={
-                    "success": False,
-                    "message": "SSH key generation failed",
-                    "error": key_msg
-                },
-                status_code=500
-            )
-        
-        # Test SSH connection (with automatic key setup if password is provided)
-        conn_success, conn_msg = await test_ssh_connection(host, username, port, password)
-        
-        if not conn_success:
-            setup_instructions = f"ssh-copy-id -i {key_path}.pub -p {port} {username}@{host}"
-            return JSONResponse(
-                content={
-                    "success": False,
-                    "message": conn_msg,
-                    "setup_instructions": setup_instructions,
-                    "key_path": key_path
-                },
-                status_code=400
-            )
-        
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "SSH connection successful",
-                "key_path": key_path
-            },
-            status_code=200
-        )
-        
-    except Exception as e:
-        logger.error(f"Error testing SSH connection: {str(e)}", exc_info=True)
-        return JSONResponse(
-            content={
-                "success": False,
-                "message": "SSH connection test failed",
-                "error": str(e)
-            },
-            status_code=500
-        )
-
-
-@app.post(
     "/apply-configuration",
     tags=["vGPU Configuration APIs"],
     responses={
@@ -1496,76 +1405,40 @@ async def test_ssh_connection_endpoint(request: Request, config_request: ApplyCo
     },
 )
 async def apply_configuration(request: Request, config_request: ApplyConfigurationRequest) -> StreamingResponse:
-    """Apply vGPU configuration locally or to a remote host via SSH."""
+    """Apply vGPU configuration by deploying vLLM locally with Docker."""
     
     if metrics:
         metrics.update_api_requests(method=request.method, endpoint=request.url.path)
     
     try:
-        deployment_mode = config_request.deployment_mode
-        logger.info(f"Deployment mode received: {deployment_mode}")
-        logger.info(f"Full request: vm_ip={config_request.vm_ip}, username={config_request.username}")
+        logger.info("Deploying vLLM locally with Docker")
+        logger.info(f"Configuration details: {config_request.configuration}")
         
-        if deployment_mode == 'local':
-            logger.info(f"Deploying configuration locally")
-            logger.info(f"Configuration details: {config_request.configuration}")
-            
-            # Deploy vLLM server locally
-            async def stream_local_deployment():
-                """Stream local vLLM deployment progress as Server-Sent Events."""
-                try:
-                    async for progress in deploy_vllm_local(config_request):
-                        yield f"data: {progress}\n\n"
-                        yield ""
-                except Exception as e:
-                    logger.error(f"Error during local vLLM deployment: {str(e)}")
-                    error_response = {
-                        "status": "error",
-                        "message": "Local vLLM deployment failed",
-                        "error": str(e)
-                    }
-                    yield f"data: {json.dumps(error_response)}\n\n"
-            
-            return StreamingResponse(
-                stream_local_deployment(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
+        # Deploy vLLM server locally
+        async def stream_local_deployment():
+            """Stream local vLLM deployment progress as Server-Sent Events."""
+            try:
+                async for progress in deploy_vllm_local(config_request):
+                    yield f"data: {progress}\n\n"
+                # Stream completed successfully - no need for additional empty yield
+            except Exception as e:
+                logger.error(f"Error during local vLLM deployment: {str(e)}")
+                error_response = {
+                    "status": "error",
+                    "message": "Local vLLM deployment failed",
+                    "error": str(e)
                 }
-            )
-        else:
-            logger.info(f"Applying configuration to host: {config_request.vm_ip}")
-            logger.info(f"Configuration details: {config_request.configuration}")
-            logger.info(f"SSH Port: {config_request.description}")
-            logger.info(f"Username: {config_request.username}")
-            
-            # Deploy vLLM server on remote VM
-            async def stream_configuration_progress():
-                """Stream vLLM deployment progress as Server-Sent Events."""
-                try:
-                    async for progress in deploy_vllm_server(config_request):
-                        yield f"data: {progress}\n\n"
-                        yield ""
-                except Exception as e:
-                    logger.error(f"Error during vLLM deployment: {str(e)}")
-                    error_response = {
-                        "status": "error",
-                        "message": "vLLM deployment failed",
-                        "error": str(e)
-                    }
-                    yield f"data: {json.dumps(error_response)}\n\n"
-            
-            return StreamingResponse(
-                stream_configuration_progress(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",  # Disable proxy buffering
-                }
-            )
+                yield f"data: {json.dumps(error_response)}\n\n"
+        
+        return StreamingResponse(
+            stream_local_deployment(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
         
     except Exception as e:
         logger.error(f"Error in /apply-configuration endpoint: {str(e)}", 
@@ -1612,10 +1485,12 @@ async def test_configuration(request: Request, config_request: ApplyConfiguratio
         deployment_mode = config_request.deployment_mode
         print(f"=" * 80)
         print(f"TEST CONFIGURATION ENDPOINT - Deployment mode received: {deployment_mode}")
-        print(f"vm_ip={config_request.vm_ip}, username={config_request.username}")
+        if deployment_mode == 'remote':
+            print(f"vm_ip={getattr(config_request, 'vm_ip', 'N/A')}, username={getattr(config_request, 'username', 'N/A')}")
         print(f"=" * 80)
         logger.info(f"Deployment mode received: {deployment_mode}")
-        logger.info(f"Full request: vm_ip={config_request.vm_ip}, username={config_request.username}")
+        if deployment_mode == 'remote':
+            logger.info(f"Full request: vm_ip={getattr(config_request, 'vm_ip', 'N/A')}, username={getattr(config_request, 'username', 'N/A')}")
         
         if deployment_mode == 'local':
             print(f">>> ROUTING TO LOCAL DEPLOYMENT <<<")
@@ -1631,8 +1506,8 @@ async def test_configuration(request: Request, config_request: ApplyConfiguratio
                     async for progress in deploy_vllm_local(config_request):
                         logger.debug(f"Yielding progress: {progress[:100]}")
                         yield f"data: {progress}\n\n"
-                        yield ""
                     logger.info("Local deployment stream completed")
+                    # Stream completed successfully - no need for additional empty yield
                 except Exception as e:
                     logger.error(f"Error during local vLLM test: {str(e)}", exc_info=True)
                     print(f">>> ERROR IN LOCAL DEPLOYMENT: {e} <<<")
@@ -1664,7 +1539,7 @@ async def test_configuration(request: Request, config_request: ApplyConfiguratio
                 try:
                     async for progress in deploy_vllm_server(config_request):
                         yield f"data: {progress}\n\n"
-                        yield ""
+                    # Stream completed successfully - no need for additional empty yield
                 except Exception as e:
                     logger.error(f"Error during vLLM deployment: {str(e)}")
                     error_response = {

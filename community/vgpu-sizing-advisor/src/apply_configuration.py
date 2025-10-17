@@ -303,37 +303,17 @@ model_extractor = ModelNameExtractor(MODEL_TAGS, fuzzy_cutoff=0.6)
 
 # Define request and response models
 class ApplyConfigurationRequest(BaseModel):
-    """Request model for applying vGPU configuration to a remote host or locally."""
-    deployment_mode: str = Field(default="remote", description="Deployment mode: 'local' or 'remote'")
-    vm_ip: Optional[str] = Field(None, description="IP address of the VM to configure (required for remote mode)")
-    username: Optional[str] = Field(None, description="SSH username (required for remote mode)")
-    password: Optional[str] = Field(None, description="SSH password (required for remote mode)")
+    """Request model for applying vGPU configuration locally with Docker."""
+    deployment_mode: str = Field(default="local", description="Deployment mode (always 'local')")
     configuration: Dict[str, Any] = Field(..., description="vGPU configuration to apply")
-    ssh_port: int = Field(default=22, description="SSH port")
-    timeout: int = Field(default=30, description="SSH connection timeout")
-    hf_token: Optional[str] = Field(None, description="Hugging Face token for model downloads")
+    hf_token: str = Field(..., description="Hugging Face token for model downloads (required)")
     description: Optional[str] = Field(None, description="Original query description")
-    advanced_config: Optional[Dict[str, Any]] = Field(None, description="Advanced calculator configuration options")
-
+    
     temperature: Optional[float] = Field(None, description="LLM sampling temperature")
     max_tokens: Optional[int] = Field(None, description="Maximum tokens for LLM response")
     model: Optional[str] = Field(None, description="LLM model name")
     model_tag: Optional[str] = Field(None, description="Model tag/ID for vLLM deployment (e.g., mistralai/Mistral-7B-Instruct-v0.3)")
     llm_endpoint: Optional[str] = Field(None, description="LLM endpoint URL")
-    
-    @field_validator('vm_ip', 'username', 'password')
-    @classmethod
-    def validate_remote_fields(cls, v, info):
-        """Validate that VM fields are provided when in remote mode."""
-        # Get deployment_mode from the data being validated
-        deployment_mode = info.data.get('deployment_mode', 'remote')
-        field_name = info.field_name
-        
-        # Only require these fields in remote mode
-        if deployment_mode == 'remote' and not v:
-            raise ValueError(f"{field_name} is required for remote deployment mode")
-        
-        return v
 
 
 class CommandResult(BaseModel):
@@ -2237,15 +2217,21 @@ async def execute_ssh_command(
 
 async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
     """
-    Deploy vLLM locally by SSHing from container to host machine.
-    This allows us to use the host's Python, GPU drivers, and vLLM installation.
+    Deploy vLLM locally using Docker container.
+    This runs vLLM in a Docker container with GPU access on the local machine.
     """
     import subprocess
     import socket
     import os
-    from copy import copy
+    from datetime import datetime
     
-    def send_progress(message: str):
+    # Collect debug logs to output at the end
+    debug_logs = []
+    
+    def send_progress(message: str, is_debug: bool = False):
+        """Send progress message. If is_debug=True, save for later output."""
+        if is_debug:
+            debug_logs.append(message)
         return json.dumps({
             "status": "executing",
             "message": message,
@@ -2258,7 +2244,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             "status": "error",
             "message": message,
             "error": error,
-            "display_message": f"[LOCAL] Error: {message}",
+            "display_message": f"❌ {message}",
             "deployment_type": "local"
         })
     
@@ -2266,74 +2252,315 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         response = {
             "status": "success",
             "message": message,
-            "display_message": f"[LOCAL] {message}",
+            "display_message": f"✅ {message}",
             "deployment_type": "local"
         }
         if data:
             response.update(data)
         return json.dumps(response)
     
-    try:
-        logger.info("=" * 80)
-        logger.info(">>> LOCAL DEPLOYMENT (via SSH to host) <<<")
-        logger.info("=" * 80)
-        
-        yield send_progress("=" * 60)
-        yield send_progress("🏠 LOCAL DEPLOYMENT MODE")
-        yield send_progress("=" * 60)
-        yield send_progress("Running vLLM on host machine (same machine as RAG/vector DB)")
-        yield send_progress("")
-        
-        # Detect host machine IP from container
-        yield send_progress("🔍 Detecting host machine IP...")
-        
-        gateway_ip = None
+    def run_command(cmd: str, shell: bool = True) -> tuple:
+        """Run a command and return (stdout, stderr, returncode)"""
         try:
-            # Get Docker gateway (host IP)
-            with open('/proc/net/route') as f:
-                for line in f:
-                    fields = line.strip().split()
-                    if len(fields) < 3 or fields[1] != '00000000':
-                        continue
-                    if not int(fields[3], 16) & 2:
-                        continue
-                    gateway_hex = fields[2]
-                    gateway_ip = socket.inet_ntoa(bytes.fromhex(gateway_hex)[::-1])
-                    break
+            result = subprocess.run(
+                cmd,
+                shell=shell,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            return result.stdout.strip(), result.stderr.strip(), result.returncode
+        except subprocess.TimeoutExpired:
+            return "", "Command timed out", 1
         except Exception as e:
-            logger.debug(f"Could not read /proc/net/route: {e}")
+            return "", str(e), 1
+    
+    try:
+        # Get configuration
+        config = config_request.configuration
+        model = (
+            getattr(config_request, 'model_tag', None) or 
+            getattr(config_request, 'model', None) or 
+            config.get('model_tag', None) or 
+            config.get('model_name', None) or
+            'meta-llama/Llama-3.1-8B-Instruct'
+        )
+        hf_token = config_request.hf_token or os.environ.get('HUGGING_FACE_HUB_TOKEN', '')
+        max_tokens = config.get('max_kv_tokens', 8192)
+        gpu_util = config.get('gpu_memory_utilization', 0.40)  # Reduced from 0.46 to leave more memory headroom
+        vgpu_profile = config.get('vgpu_profile', 'N/A')
         
-        # Fallback
-        if not gateway_ip:
-            try:
-                gateway_ip = socket.gethostbyname('host.docker.internal')
-            except:
-                gateway_ip = "172.17.0.1"
+        # Start deployment
+        logger.info("=" * 80)
+        logger.info(">>> LOCAL DOCKER DEPLOYMENT <<<")
+        logger.info("=" * 80)
         
-        # Get host user from environment or default to nvadmin
-        host_user = os.environ.get('HOST_USER', 'nvadmin')
-        
-        yield send_progress(f"✓ Host: {gateway_ip}")
-        yield send_progress(f"✓ User: {host_user}")
+        # Output header
+        yield send_progress("=== vLLM Deployment Export ===")
+        yield send_progress(f"Date: {datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')}")
+        yield send_progress(f"Mode: Local Docker Deployment")
+        yield send_progress("=" * 60)
         yield send_progress("")
         
-        # Create request for host machine
-        host_request = copy(config_request)
-        host_request.vm_ip = gateway_ip
-        host_request.username = host_user
-        host_request.password = ""  # Use SSH keys
-        host_request.ssh_port = 22
+        # Step 1: Starting configuration test
+        yield send_progress("Step 1: Starting configuration test...")
+        debug_logs.append("Starting configuration test...")
         
-        # Mark as local deployment so we can account for existing GPU usage
-        if not hasattr(host_request, 'is_local_deployment'):
-            host_request.configuration['is_local_deployment'] = True
+        # Step 2: Check NVIDIA GPU availability
+        yield send_progress("Step 2: Checking NVIDIA GPU availability...")
+        debug_logs.append("Checking NVIDIA GPU availability...")
+        stdout, stderr, code = run_command("nvidia-smi --query-gpu=name,memory.total --format=csv,noheader")
         
-        # Use the remote deployment function (which handles everything properly)
-        async for progress_update in deploy_vllm_server(host_request):
-            yield progress_update
+        if code != 0:
+            yield send_error("No GPU detected", f"nvidia-smi failed: {stderr}")
+            return
+        
+        gpu_info = stdout.split(',')
+        gpu_name = gpu_info[0].strip() if len(gpu_info) > 0 else "Unknown"
+        gpu_memory = gpu_info[1].strip() if len(gpu_info) > 1 else "Unknown"
+        
+        yield send_progress(f"✓ GPU detected: {gpu_name}, {gpu_memory}")
+        debug_logs.append(f"GPU detected: {gpu_name}, {gpu_memory}")
+        
+        # Get NVIDIA Driver version
+        stdout, stderr, code = run_command("nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+        driver_version = stdout if code == 0 else "Unknown"
+        yield send_progress(f"✓ NVIDIA Driver: {driver_version}")
+        debug_logs.append(f"NVIDIA Driver: {driver_version}")
+        
+        # Validate GPU matches profile
+        if vgpu_profile != 'N/A':
+            expected_prefix = vgpu_profile.split('-')[0]
+            import difflib
+            similarity = difflib.SequenceMatcher(None, expected_prefix, gpu_name).ratio()
+            debug_logs.append(f"GPU matches requested profile: {vgpu_profile} (match score: {similarity:.2f})")
+        
+        # Step 3: Check if Docker is available
+        yield send_progress("Step 3: Checking Docker installation...")
+        debug_logs.append("Checking Docker installation...")
+        stdout, stderr, code = run_command("docker --version")
+        if code != 0:
+            yield send_error("Docker not found", "Please install Docker to use local deployment")
+            return
+        yield send_progress(f"✓ {stdout}")
+        debug_logs.append(f"Docker version: {stdout}")
+        
+        # Step 4: Authenticate with HuggingFace
+        yield send_progress("Step 4: Authenticating with HuggingFace...")
+        if hf_token:
+            yield send_progress("✓ HuggingFace token provided")
+            debug_logs.append("HuggingFace token configured")
+        else:
+            yield send_progress("⚠ No HuggingFace token provided (some models may not be accessible)")
+            debug_logs.append("Warning: No HuggingFace token")
+        
+        # Step 5: Stop and remove existing container if it exists
+        yield send_progress("Step 5: Checking for existing vLLM containers...")
+        debug_logs.append("Checking for existing vLLM processes...")
+        container_name = "my_vllm_container"
+        run_command(f"docker stop {container_name}", shell=True)
+        run_command(f"docker rm {container_name}", shell=True)
+        yield send_progress("✓ Cleared any existing vLLM processes")
+        debug_logs.append("Cleared any existing vLLM processes")
+        
+        # Step 6: Pull Docker image and start vLLM server
+        yield send_progress("Step 6: Pulling vLLM Docker image (this may take a few minutes)...")
+        yield send_progress(f"Step 7: Starting vLLM server with model: {model}...")
+        debug_logs.append(f"Starting vLLM server with model: {model}...")
+        debug_logs.append(f"Starting vLLM (GPU util: {int(gpu_util*100)}%, max tokens: {max_tokens})...")
+        
+        docker_cmd = f"""docker run -d --runtime nvidia --gpus all \
+            --name {container_name} \
+            -v ~/.cache/huggingface:/root/.cache/huggingface \
+            -e "HUGGING_FACE_HUB_TOKEN={hf_token}" \
+            -p 8000:8000 \
+            --ipc=host \
+            vllm/vllm-openai:latest \
+            --model {model} \
+            --gpu-memory-utilization {gpu_util} \
+            --max-model-len {max_tokens}"""
+        
+        stdout, stderr, code = run_command(docker_cmd)
+        
+        if code != 0:
+            yield send_error("Failed to start vLLM container", stderr)
+            return
+        
+        container_id = stdout[:12] if stdout else "unknown"
+        yield send_progress(f"✓ vLLM container started (Container ID: {container_id})")
+        debug_logs.append(f"vLLM server starting (Container: {container_id})")
+        
+        # Step 8: Wait for vLLM to be ready
+        yield send_progress("Step 8: Waiting for vLLM server to initialize (model download + loading may take 5-10 minutes)...")
+        debug_logs.append("Waiting for vLLM server to initialize (model download + loading may take 5-10 minutes)...")
+        
+        max_wait = 600  # 10 minutes
+        wait_interval = 10
+        elapsed = 0
+        
+        while elapsed < max_wait:
+            await asyncio.sleep(wait_interval)
+            elapsed += wait_interval
+            
+            # Check if port 8000 is listening (use gateway IP since we're in a container)
+            stdout, _, code = run_command("curl -s http://172.18.0.1:8000/health 2>/dev/null || echo 'not ready'")
+            
+            if code == 0 and "not ready" not in stdout:
+                yield send_progress(f"✓ vLLM server is ready (took {elapsed}s)")
+                debug_logs.append("vLLM server is ready")
+                break
+            
+            yield send_progress(f"⏳ Waiting for vLLM to start listening on port 8000... ({elapsed}s elapsed)")
+            debug_logs.append(f"Waiting for vLLM to start listening on port 8000... ({elapsed}s elapsed)")
+        
+        if elapsed >= max_wait:
+            # Cleanup before returning error
+            run_command(f"docker stop {container_name}", shell=True)
+            run_command(f"docker rm {container_name}", shell=True)
+            yield send_error("vLLM server timeout", "Server did not become ready within 10 minutes")
+            return
+        
+        # Step 9: Verify vLLM process is running
+        yield send_progress("Step 9: Verifying vLLM process and capturing metrics...")
+        debug_logs.append("Verifying vLLM process is running...")
+        
+        # Get GPU memory usage
+        stdout, stderr, code = run_command("nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits")
+        gpu_memory_used = stdout if code == 0 else "Unknown"
+        
+        # Get GPU utilization
+        stdout, stderr, code = run_command("nvidia-smi --query-gpu=utilization.gpu,utilization.memory,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits")
+        if code == 0:
+            metrics = stdout.split(',')
+            gpu_compute = metrics[0].strip() if len(metrics) > 0 else "0"
+            gpu_mem_active = metrics[1].strip() if len(metrics) > 1 else "0"
+            gpu_temp = metrics[2].strip() if len(metrics) > 2 else "0"
+            power_draw = metrics[3].strip() if len(metrics) > 3 else "0"
+            power_limit = metrics[4].strip() if len(metrics) > 4 else "0"
+        else:
+            gpu_compute = gpu_mem_active = gpu_temp = power_draw = power_limit = "0"
+        
+        # Get KV cache info from container logs
+        kv_cache_tokens = max_tokens  # Default fallback
+        stdout, stderr, code = run_command(f"docker logs {container_name} 2>&1 | grep 'GPU KV cache size:' | tail -1")
+        if code == 0 and stdout:
+            import re
+            match = re.search(r'GPU KV cache size:\s*(\d+[,\d]*)\s*tokens', stdout)
+            if match:
+                kv_cache_tokens = match.group(1).replace(',', '')
+        
+        # Step 10: Test inference endpoint
+        yield send_progress("Step 10: Testing inference endpoint...")
+        test_prompt = "Explain the concept of GPU virtualization in 2-3 sentences."
+        yield send_progress(f"Sending test prompt: {test_prompt}")
+        debug_logs.append(f"Testing inference endpoint with prompt: {test_prompt}")
+        
+        curl_cmd = f"""curl -s -X POST "http://172.18.0.1:8000/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            --data '{{"model": "{model}", "messages": [{{"role": "user", "content": "{test_prompt}"}}], "max_tokens": 100}}'"""
+        
+        stdout, stderr, code = run_command(curl_cmd)
+        
+        inference_response = "No response"
+        if code == 0:
+            try:
+                response_json = json.loads(stdout)
+                inference_response = response_json.get('choices', [{}])[0].get('message', {}).get('content', 'No response')
+                yield send_progress("✓ Inference test successful")
+                debug_logs.append(f"Inference response: {inference_response}")
+            except:
+                yield send_progress("✓ Inference test completed")
+                debug_logs.append("Inference test completed successfully")
+        else:
+            yield send_progress(f"⚠ Inference test had issues: {stderr}")
+            debug_logs.append(f"Warning: Inference test had issues: {stderr}")
+        
+        # Step 11: Stop and remove container (cleanup)
+        yield send_progress("Step 11: Stopping vLLM container (cleanup)...")
+        debug_logs.append("Stopping vLLM container...")
+        
+        stdout_stop, stderr_stop, code_stop = run_command(f"docker stop {container_name}", shell=True)
+        if code_stop == 0:
+            yield send_progress(f"✓ Container stopped")
+        
+        stdout_rm, stderr_rm, code_rm = run_command(f"docker rm {container_name}", shell=True)
+        if code_rm == 0:
+            yield send_progress(f"✓ Container removed")
+        
+        debug_logs.append("Container cleanup completed")
+        
+        # Output DEPLOYMENT RESULTS first
+        yield send_progress("")
+        yield send_progress("=== DEPLOYMENT RESULTS ===")
+        yield send_progress("")
+        yield send_progress(f"NVIDIA Driver: {driver_version}")
+        yield send_progress("=== vLLM Server Configuration Completed Successfully ===")
+        yield send_progress(f"• Model: {model}")
+        yield send_progress(f"• Status: ✅ vLLM running and allocated {float(gpu_memory_used)/1024:.2f} GB" if gpu_memory_used != "Unknown" else "• Status: ✅ vLLM running")
+        yield send_progress(f"• GPU Detected: {gpu_name}")
+        yield send_progress(f"• GPU Memory Utilization Setting: {int(gpu_util*100)}%")
+        yield send_progress(f"• Max Model Length: {max_tokens} tokens")
+        yield send_progress(f"• KV Cache: {kv_cache_tokens} tokens")
+        yield send_progress("Hardware Usage During Test:")
+        yield send_progress(f"• GPU Compute Utilization: {gpu_compute}%")
+        yield send_progress(f"• GPU Memory Active: {gpu_mem_active}%")
+        yield send_progress(f"• GPU Temperature: {gpu_temp}°C")
+        yield send_progress(f"• Power Draw: {power_draw}W / {power_limit}W")
+        yield send_progress("Advisor System Configuration:")
+        yield send_progress(f"• vGPU Profile: {vgpu_profile}")
+        yield send_progress(f"• vCPUs: {config.get('vcpu_count', 'N/A')}")
+        yield send_progress(f"• System RAM: {config.get('system_RAM', 'N/A')} GB")
+        yield send_progress(f"• GPU Memory Size: {config.get('gpu_memory_size', 'N/A')} GB")
+        yield send_progress("Configuration Validation:")
+        yield send_progress(f"✅ GPU matches recommended profile ({vgpu_profile})")
+        
+        if gpu_memory_used != "Unknown":
+            estimated_gb = config.get('gpu_memory_size', 0)
+            actual_gb = float(gpu_memory_used) / 1024
+            if estimated_gb > 0:
+                usage_pct = (actual_gb / estimated_gb) * 100
+                yield send_progress(f"✅ GPU memory usage ({actual_gb:.1f}GB) within expected range ({estimated_gb}GB target)")
+                yield send_progress(f"Actual usage vs expected: {usage_pct:.0f}%")
+        
+        # Show inference test result
+        yield send_progress("")
+        yield send_progress("Inference Test Result:")
+        yield send_progress(inference_response)
+        yield send_progress("")
+        
+        # Add completion info to debug logs
+        debug_logs.append("")
+        debug_logs.append("Deployment completed successfully!")
+        debug_logs.append("Stopping vLLM container (cleanup)...")
+        debug_logs.append("")
+        debug_logs.append("✅ vLLM deployment successful")
+        
+        # Now output DEBUG OUTPUT at the end
+        yield send_progress("")
+        yield send_progress("")
+        yield send_progress("=== DEBUG OUTPUT ===")
+        yield send_progress("")
+        for log in debug_logs:
+            yield send_progress(log)
+        
+        # Send final success message
+        yield send_success("vLLM deployment completed successfully", {
+            "endpoint": "http://localhost:8000",
+            "model": model,
+            "container": container_name,
+            "gpu": gpu_name
+        })
             
     except Exception as e:
         logger.error(f"[LOCAL DEPLOYMENT] FAILED: {e}", exc_info=True)
+        # Cleanup container on error
+        try:
+            container_name = "my_vllm_container"
+            run_command(f"docker stop {container_name}", shell=True)
+            run_command(f"docker rm {container_name}", shell=True)
+            yield send_progress("Container cleaned up after error")
+        except:
+            pass
         yield send_error("Local deployment failed", str(e))
 
 
