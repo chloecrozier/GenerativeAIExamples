@@ -18,8 +18,8 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
 RUN rm -rf /var/lib/apt/lists/*
 
-# Uninstall build packages
-RUN apt autoremove -y curl software-properties-common
+# Uninstall build packages (keep curl for health checks)
+RUN apt autoremove -y software-properties-common
 
 # Download the sources of apt packages within the container for standard legal compliance
 RUN sed -i 's/# deb-src/deb-src/g' /etc/apt/sources.list
