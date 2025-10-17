@@ -88,34 +88,80 @@ Access the UI at **http://localhost:3000**
 3. **Specify Requirements** - Concurrent users, latency targets, throughput needs
 4. **Get Recommendation** - View suggested vGPU profile and resource allocation
 
-### 7. Test Configuration (Optional)
+### 7. Apply Configuration
 
-To validate the recommendation on a real VM:
+Deploy vLLM locally to validate your configuration:
 
-**First-time SSH Setup:**
-1. Click **"Test Connection"** in the Apply Configuration form
-2. If SSH key doesn't exist, it will be auto-generated at `~/.ssh/vgpu_sizing_advisor`
-3. You'll see instructions to copy the key to your VM:
-   ```bash
-   ssh-copy-id -i ~/.ssh/vgpu_sizing_advisor.pub -p 22 username@vm-ip
-   ```
-4. Run that command (you'll enter your password once)
-5. Click **"Test Connection"** again to verify
-
-**Deploy and Test:**
-1. Click **"Apply Configuration"**
-2. Enter VM details:
-   - VM IP Address
-   - Username
-   - HuggingFace Token
-3. Click **"Apply Configuration"**
+1. After receiving your vGPU recommendation, click **"Apply Configuration"**
+2. Enter your HuggingFace Token
+3. Click **"Apply Configuration"** to deploy
 
 The tool will:
-- Deploy vLLM server on your VM
+- Deploy vLLM using Docker on your local machine
+- Allocate GPU resources based on your configuration
+- Start the vLLM server on port 8000
 - Run inference tests
-- Report actual performance metrics
+- Report comprehensive metrics:
+  - GPU memory utilization
+  - Inference performance
+  - Hardware metrics (temperature, power draw)
+  - Configuration validation
 
-**Note:** SSH key setup is a one-time process. After setup, deployments work seamlessly!
+**Output Format:**
+
+The deployment provides detailed information in two sections:
+
+1. **DEPLOYMENT RESULTS** (shown first):
+   - NVIDIA Driver version
+   - Model information and status
+   - GPU detection and memory allocation
+   - Hardware usage during test
+   - Configuration validation
+   - Success confirmation
+
+2. **DEBUG OUTPUT** (shown at bottom):
+   - Step-by-step execution logs
+   - System checks and initialization
+   - Model loading progress
+   - Inference test results
+
+**Manual Docker Deployment:**
+
+You can also run vLLM manually with Docker:
+
+```bash
+# Stop any existing container
+docker stop my_vllm_container && docker rm my_vllm_container
+
+# Run vLLM with your configuration
+docker run -d --runtime nvidia --gpus all \
+  --name my_vllm_container \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -e "HUGGING_FACE_HUB_TOKEN=<your-token>" \
+  -p 8000:8000 \
+  --ipc=host \
+  vllm/vllm-openai:latest \
+  --model meta-llama/Meta-Llama-3-8B-Instruct \
+  --gpu-memory-utilization 0.46 \
+  --max-model-len 8192
+
+# Test the deployment
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "model": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain what a vGPU is"
+      }
+    ]
+  }'
+```
+
+**Export Logs:**
+
+Click the "Export Logs" button to download a complete deployment report including all metrics and debug information.
 
 ## What You Get
 

@@ -119,6 +119,8 @@ services:
     shm_size: 5gb
     volumes:
       - ../../src:/workspace/src:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker:/usr/local/bin/docker:ro
     deploy:
       resources:
         reservations:

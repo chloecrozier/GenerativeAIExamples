@@ -49,7 +49,6 @@ export default function ApplyConfigurationForm({
   onClose,
   configuration,
 }: ApplyConfigurationFormProps) {
-  const [deploymentMode, setDeploymentMode] = useState<'local' | 'remote'>('remote');
   const [formData, setFormData] = useState<FormData>({
     vmIpAddress: "",
     username: "",
@@ -58,65 +57,17 @@ export default function ApplyConfigurationForm({
   });
 
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
   
-  // Separate state for local vs remote deployments
-  const [localState, setLocalState] = useState({
-    isSubmitting: false,
-    showLogs: false,
-    logs: [] as string[],
-    isComplete: false,
-    showDebugLogs: false,
-    displayMessage: "",
-    testMetrics: null as any,
-    error: null as string | null,
-  });
-  
-  const [remoteState, setRemoteState] = useState({
-    isSubmitting: false,
-    showLogs: false,
-    logs: [] as string[],
-    isComplete: false,
-    showDebugLogs: false,
-    displayMessage: "",
-    testMetrics: null as any,
-    error: null as string | null,
-  });
-
-  // Get current state based on deployment mode
-  const currentState = deploymentMode === 'local' ? localState : remoteState;
-  const setCurrentState = deploymentMode === 'local' ? setLocalState : setRemoteState;
-  
-  // Convenience accessors for current state
-  const isSubmitting = currentState.isSubmitting;
-  const showLogs = currentState.showLogs;
-  const configurationLogs = currentState.logs;
-  const isConfigurationComplete = currentState.isComplete;
-  const showDebugLogs = currentState.showDebugLogs;
-  const currentDisplayMessage = currentState.displayMessage;
-  const testMetrics = currentState.testMetrics;
-  const deploymentError = currentState.error;
-
-  // Helper functions to update current state
-  const updateCurrentState = (updates: Partial<typeof currentState>) => {
-    setCurrentState(prev => ({ ...prev, ...updates }));
-  };
-
-  const setIsSubmitting = (value: boolean) => updateCurrentState({ isSubmitting: value });
-  const setShowLogs = (value: boolean) => updateCurrentState({ showLogs: value });
-  const setConfigurationLogs = (logs: string[] | ((prev: string[]) => string[])) => {
-    if (typeof logs === 'function') {
-      setCurrentState(prev => ({ ...prev, logs: logs(prev.logs) }));
-    } else {
-      updateCurrentState({ logs });
-    }
-  };
-  const setIsConfigurationComplete = (value: boolean) => updateCurrentState({ isComplete: value });
-  const setShowDebugLogs = (value: boolean) => updateCurrentState({ showDebugLogs: value });
-  const setCurrentDisplayMessage = (value: string) => updateCurrentState({ displayMessage: value });
-  const setTestMetrics = (value: any) => updateCurrentState({ testMetrics: value });
-  const setDeploymentError = (value: string | null) => updateCurrentState({ error: value });
+  // Single deployment state (always local)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [configurationLogs, setConfigurationLogs] = useState<string[]>([]);
+  const [isConfigurationComplete, setIsConfigurationComplete] = useState(false);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [currentDisplayMessage, setCurrentDisplayMessage] = useState("");
+  const [testMetrics, setTestMetrics] = useState<any>(null);
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
 
   // Validate IP address format
   const validateIpAddress = (ip: string): boolean => {
@@ -128,24 +79,7 @@ export default function ApplyConfigurationForm({
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
 
-    // Only validate VM fields if in remote mode
-    if (deploymentMode === 'remote') {
-      if (!formData.vmIpAddress) {
-        errors.vmIpAddress = "VM IP address is required";
-      } else if (!validateIpAddress(formData.vmIpAddress)) {
-        errors.vmIpAddress = "Invalid IP address format";
-      }
-
-      if (!formData.username) {
-        errors.username = "Username is required";
-      }
-
-      if (!formData.password) {
-        errors.password = "Password is required (used for automatic SSH key setup)";
-      }
-    }
-
-    // Always require Hugging Face token
+    // Only require Hugging Face token for local deployment
     if (!formData.huggingFaceToken) {
       errors.huggingFaceToken = "Hugging Face token is required";
     }
@@ -164,27 +98,19 @@ export default function ApplyConfigurationForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Debug: Check deployment mode at submission
-    console.log("=== HANDLE SUBMIT CALLED ===");
-    console.log("Current deploymentMode:", deploymentMode);
-    console.log("========================");
 
     if (!validateForm()) {
       return;
     }
 
-    // Update the appropriate state (local or remote)
-    setCurrentState(prev => ({
-      ...prev,
-      isSubmitting: true,
-      showLogs: false,
-      isComplete: false,
-      testMetrics: null,
-      logs: [deploymentMode === 'local' ? "Starting local deployment test..." : "Starting configuration test..."],
-      displayMessage: "",
-      error: null,
-    }));
+    // Reset state for new deployment
+    setIsSubmitting(true);
+    setShowLogs(false);
+    setIsConfigurationComplete(false);
+    setTestMetrics(null);
+    setConfigurationLogs(["Starting local vLLM deployment..."]);
+    setCurrentDisplayMessage("");
+    setDeploymentError(null);
 
     try {
       // Extract and normalize the configuration data
@@ -211,35 +137,15 @@ export default function ApplyConfigurationForm({
                    configData?.parameters?.model_name ||
                    'Qwen/Qwen2.5-0.5B-Instruct';  // Default to an open-access model
       
-      console.log("🔍 Model Selection Debug:");
-      console.log("  - configData:", configData);
-      console.log("  - configData.model_tag:", configData?.model_tag);
-      console.log("  - configData.model_name:", configData?.model_name);
-      console.log("  - configData.parameters?.model_tag:", configData?.parameters?.model_tag);
-      console.log("  - configData.parameters?.model_name:", configData?.parameters?.model_name);
-      console.log("  - Selected model:", model);
-      
+      // Always deploy locally
       const payload: any = {
-        deployment_mode: deploymentMode,
+        deployment_mode: 'local',
         hf_token: formData.huggingFaceToken,
         configuration: configData,
         model_tag: model,
-        test_duration_seconds: 30,
       };
       
-      // Only include VM credentials for remote mode
-      if (deploymentMode === 'remote') {
-        payload.vm_ip = formData.vmIpAddress;
-        payload.username = formData.username;
-        payload.password = formData.password;
-      }
-      
-      console.log("=".repeat(80));
-      console.log("FRONTEND: Sending request with deployment_mode:", deploymentMode);
-      console.log("FRONTEND: Full payload:", JSON.stringify(payload, null, 2));
-      console.log("=".repeat(80));
-      
-      const response = await fetch('/api/test-configuration', {
+      const response = await fetch('/api/apply-configuration', {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -412,31 +318,17 @@ export default function ApplyConfigurationForm({
       huggingFaceToken: "",
     });
     setFormErrors({});
-    setShowPassword(false);
     setShowToken(false);
     
-    // Reset both local and remote states
-    setLocalState({
-      isSubmitting: false,
-      showLogs: false,
-      logs: [],
-      isComplete: false,
-      showDebugLogs: false,
-      displayMessage: "",
-      testMetrics: null,
-      error: null,
-    });
-    
-    setRemoteState({
-      isSubmitting: false,
-      showLogs: false,
-      logs: [],
-      isComplete: false,
-      showDebugLogs: false,
-      displayMessage: "",
-      testMetrics: null,
-      error: null,
-    });
+    // Reset deployment state
+    setIsSubmitting(false);
+    setShowLogs(false);
+    setConfigurationLogs([]);
+    setIsConfigurationComplete(false);
+    setShowDebugLogs(false);
+    setCurrentDisplayMessage("");
+    setTestMetrics(null);
+    setDeploymentError(null);
     
     onClose();
   };
@@ -569,25 +461,13 @@ export default function ApplyConfigurationForm({
     const deploymentResults = getDeploymentResultsText();
     const debugLogs = getDebugLogsText();
     
-    // Add header information based on deployment mode
-    const header = deploymentMode === 'local' 
-      ? [
-          '=== Local vLLM Deployment Export ===',
-          `Date: ${new Date().toLocaleString()}`,
-          `Machine: ${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}`,
-          configuration?.parameters?.vGPU_profile ? `vGPU Profile: ${configuration.parameters.vGPU_profile}` : '',
-          configuration?.parameters?.model_name ? `Model: ${configuration.parameters.model_name}` : '',
-          '================================\n'
-        ].filter(Boolean).join('\n')
-      : [
-          '=== Remote vLLM Deployment Export ===',
-          `Date: ${new Date().toLocaleString()}`,
-          `VM IP: ${formData.vmIpAddress}`,
-          `Username: ${formData.username}`,
-          configuration?.parameters?.vGPU_profile ? `vGPU Profile: ${configuration.parameters.vGPU_profile}` : '',
-          configuration?.parameters?.model_name ? `Model: ${configuration.parameters.model_name}` : '',
-          '================================\n'
-        ].filter(Boolean).join('\n');
+    // Add header information for local deployment
+    const header = [
+      '=== vLLM Deployment Export ===',
+      `Date: ${new Date().toLocaleString()}`,
+      `Mode: Local Docker Deployment`,
+      '================================\n'
+    ].join('\n');
     
     // Build content
     let fullContent = header + '\n';
@@ -631,12 +511,9 @@ export default function ApplyConfigurationForm({
         <div className="p-6 border-b border-neutral-700">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-white">Deploy vLLM Server</h2>
+              <h2 className="text-xl font-semibold text-white">Apply Configuration</h2>
               <p className="text-sm text-gray-400 mt-1">
-                {deploymentMode === 'local' 
-                  ? 'Deploy vLLM inference server locally on this machine'
-                  : 'Deploy vLLM inference server on remote VM with Hugging Face integration'
-                }
+                Deploy vLLM locally using Docker with your recommended configuration
               </p>
             </div>
             <button
@@ -649,148 +526,12 @@ export default function ApplyConfigurationForm({
               </svg>
             </button>
           </div>
-
-          {/* Deployment Mode Tabs */}
-          <div className="flex gap-2 mt-4 border-b border-neutral-600">
-            <button
-              type="button"
-              onClick={() => setDeploymentMode('local')}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                deploymentMode === 'local'
-                  ? 'text-green-400'
-                  : 'text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              Local Machine
-              {deploymentMode === 'local' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-400"></div>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeploymentMode('remote')}
-              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                deploymentMode === 'remote'
-                  ? 'text-green-400'
-                  : 'text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              Remote VM
-              {deploymentMode === 'remote' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-400"></div>
-              )}
-            </button>
-          </div>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Remote VM Fields - Only show when in remote mode */}
-            {deploymentMode === 'remote' && (
-              <>
-                {/* VM IP Address */}
-                <div>
-                  <label htmlFor="vmIpAddress" className="block text-sm font-medium text-gray-300 mb-2">
-                    VM IP Address
-                  </label>
-              <input
-                id="vmIpAddress"
-                type="text"
-                value={formData.vmIpAddress}
-                onChange={(e) => handleInputChange("vmIpAddress", e.target.value)}
-                placeholder="Enter the IP address of your Virtual Machine (VM)"
-                className={`w-full p-3 rounded-lg bg-neutral-800 border ${
-                  formErrors.vmIpAddress ? "border-red-500" : "border-neutral-600"
-                } text-white placeholder-gray-500 focus:outline-none focus:border-green-500 transition-colors`}
-              />
-              {formErrors.vmIpAddress && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.vmIpAddress}</p>
-              )}
-            </div>
-
-            {/* Username */}
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={formData.username}
-                onChange={(e) => handleInputChange("username", e.target.value)}
-                placeholder="Enter your VM username"
-                className={`w-full p-3 rounded-lg bg-neutral-800 border ${
-                  formErrors.username ? "border-red-500" : "border-neutral-600"
-                } text-white placeholder-gray-500 focus:outline-none focus:border-green-500 transition-colors`}
-              />
-              {formErrors.username && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.username}</p>
-              )}
-            </div>
-
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                Password{' '}
-                <span className="relative group">
-                  <span className="text-green-400 text-xs cursor-help">(Auto-configures SSH keys)</span>
-                  {/* Hover Tooltip */}
-                  <div className="invisible group-hover:visible absolute left-0 top-full mt-2 w-80 bg-green-900/95 border border-green-500/50 rounded-lg p-4 shadow-xl z-50">
-                    <div className="flex items-start gap-3">
-                      <svg className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div>
-                        <h4 className="text-green-300 font-semibold mb-1 text-sm">Automatic SSH Setup</h4>
-                        <p className="text-green-200 text-xs">
-                          Just enter your VM password once! The tool will automatically set up secure SSH keys (vgpu_sizing_advisor) for you.
-                        </p>
-                        <p className="text-green-200 text-xs mt-2">
-                          <strong>First time:</strong> Uses password to copy SSH keys to VM.<br />
-                          <strong>After that:</strong> Secure key-based authentication (no password needed).
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </span>
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={(e) => handleInputChange("password", e.target.value)}
-                  placeholder="Enter your VM password"
-                  className={`w-full p-3 pr-12 rounded-lg bg-neutral-800 border ${
-                    formErrors.password ? "border-red-500" : "border-neutral-600"
-                  } text-white placeholder-gray-500 focus:outline-none focus:border-green-500 transition-colors`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                >
-                  {showPassword ? (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-              {formErrors.password && (
-                <p className="mt-1 text-sm text-red-500">{formErrors.password}</p>
-              )}
-                </div>
-              </>
-            )}
-
-            {/* Hugging Face Token - Always visible for both local and remote */}
+            {/* Hugging Face Token */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <label htmlFor="huggingFaceToken" className="text-sm font-medium text-gray-300">
@@ -845,14 +586,14 @@ export default function ApplyConfigurationForm({
               className={`w-full py-3 px-4 rounded-lg font-medium transition-all ${
                 isSubmitting
                   ? "bg-neutral-700 text-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-green-600 text-white hover:bg-green-700"
               }`}
             >
               {isSubmitting 
-                ? (deploymentMode === 'local' ? "Testing Locally..." : "Running Test...") 
+                ? "Deploying..." 
                 : isConfigurationComplete
-                ? (deploymentMode === 'local' ? "Test Locally Again" : "Run Test Again")
-                : (deploymentMode === 'local' ? "Test Locally" : "Test on Remote VM")}
+                ? "Apply Configuration Again"
+                : "Apply Configuration"}
             </button>
           </form>
 
@@ -860,15 +601,15 @@ export default function ApplyConfigurationForm({
           {isSubmitting && (
             <div className="mt-6 border-t border-neutral-700 pt-6">
               <div className="text-center">
-                <h3 className="text-lg font-medium text-white mb-4">Running Configuration Test</h3>
+                <h3 className="text-lg font-medium text-white mb-4">
+                  Deploying vLLM Locally
+                </h3>
                 <Spinner />
                 <p className="text-sm text-gray-400 mt-4">
-                  {deploymentMode === 'local' 
-                    ? 'Please wait while we test locally on this machine...'
-                    : 'Please wait while we test your VM configuration...'}
+                  Setting up vLLM container on this machine...
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
-                  This test typically takes 30-60 seconds
+                  Model download and initialization may take 5-10 minutes on first run
                 </p>
                 {currentDisplayMessage && (
                   <div className="mt-4 p-3 bg-neutral-800 rounded-lg border border-neutral-600">

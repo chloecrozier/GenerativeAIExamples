@@ -3,6 +3,51 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 
+## [2.3.0] - 2025-10-17
+
+This release introduces simplified local Docker deployment for vLLM with an integrated UI workflow.
+
+### Added
+- **Apply Configuration UI**
+  - Simple "Apply Configuration" button after vGPU profile calculation
+  - One-click local Docker deployment
+  - No VM or SSH configuration needed
+  - Only requires HuggingFace token
+
+- **Enhanced Deployment Output**
+  - Deployment results shown first with comprehensive metrics
+  - Debug output displayed at the bottom
+  - Real-time GPU metrics (utilization, temperature, power draw)
+  - Configuration validation (actual vs. expected memory usage)
+  - Structured logging for troubleshooting
+
+### Changed
+- **Simplified Deployment**
+  - Removed remote VM deployment options from UI
+  - Local-only Docker deployment
+  - `deploy_vllm_local()` uses Docker containers with NVIDIA GPU support
+  - Output format: DEPLOYMENT RESULTS first, then DEBUG OUTPUT
+
+- **UI Workflow**
+  - User calculates vGPU profile via chat
+  - Clicks "Apply Configuration" to open deployment modal
+  - Enters HuggingFace token
+  - Clicks "Apply Configuration" to deploy
+  - Views real-time progress and results
+
+- **Output Structure**
+  - Header: Deployment timestamp and mode
+  - DEPLOYMENT RESULTS: Status, GPU metrics, validation
+  - DEBUG OUTPUT: Step-by-step execution logs
+
+### Improved
+- **User Experience**
+  - Streamlined workflow from calculation to deployment
+  - Minimal configuration required
+  - Clear progress indicators
+  - Export logs functionality
+  - Automatic cleanup of previous deployments
+
 ## [2.2.0] - 2025-10-13
 
 This release focuses on the AI vWS Sizing Advisor with enhanced deployment capabilities, improved user experience, and zero external dependencies for SSH operations.
