@@ -360,100 +360,49 @@ export default function ApplyConfigurationForm({
 
   // Helper function to get formatted deployment results
   const getDeploymentResultsText = () => {
-    const resultPatterns = [
-      "=== vLLM Server Configuration",
-      "Configuration Details:",
-      "Model:",
-      "Status:",
-      "GPU Detected:",
-      "GPU Memory Utilization",
-      "Max Model Length:",
-      "KV Cache:",
-      "Hardware Usage During Test:",
-      "GPU Compute Utilization:",
-      "GPU Memory Active:",
-      "GPU Temperature:",
-      "Power Draw:",
-      "Advisor System Configuration:",
-      "vGPU Profile:",
-      "vCPUs:",
-      "System RAM:",
-      "GPU Memory Size:",
-      "Configuration Validation:",
-      "✅",
-      "⚠️",
-      "vLLM deployment successful",
-      "NVIDIA Driver:"
-    ];
+    const results: string[] = [];
+    let capturing = false;
     
-    return configurationLogs.filter(log => {
-      // Exclude error messages if deploymentError is set (shown separately)
-      if (deploymentError && (log.includes("❌ Error:") || log.includes("Error:"))) {
-        return false;
+    for (const log of configurationLogs) {
+      // Start capturing after "=== DEPLOYMENT RESULTS ==="
+      if (log.includes("=== DEPLOYMENT RESULTS ===")) {
+        capturing = true;
+        continue; // Skip the header itself
       }
-      // Exclude "Next Steps" section and API testing commands
-      if (log.includes("Next Steps:") || 
-          log.includes("Test API:") || 
-          log.includes("View Logs:") || 
-          log.includes("Stop Server:") ||
-          log.includes("Server Endpoint:") ||
-          log.includes("Health Endpoint:") ||
-          log.includes("curl") ||
-          log.includes("ssh") ||
-          log.includes("tail") ||
-          log.includes("pkill")) {
-        return false;
+      
+      // Stop capturing when we hit deployment logs
+      if (log.includes("=== DEPLOYMENT LOG ===")) {
+        break;
       }
-      // Exclude Inference Test section
-      if (log.includes("Inference Test:") ||
-          log.includes("Query:") ||
-          log.includes("Max Tokens:") ||
-          log.includes("Response Preview:")) {
-        return false;
+      
+      // Only capture if we're in the results section
+      if (capturing) {
+        results.push(log);
       }
-      return resultPatterns.some(pattern => log.includes(pattern));
-    });
+    }
+    
+    return results;
   };
 
   // Helper function to get debug logs
   const getDebugLogsText = () => {
-    const debugPatterns = [
-      "Starting configuration",
-      "Testing SSH connection",
-      "SSH connection",
-      "Checking NVIDIA GPU",
-      "GPU detected:",
-      "NVIDIA Driver:",
-      "GPU matches requested",
-      "Checking Python",
-      "Python version:",
-      "Virtual environment",
-      "Checking vLLM",
-      "vLLM already installed",
-      "Authenticating with Hugging Face",
-      "Authenticating with HuggingFace",
-      "Clearing cached HuggingFace",
-      "Successfully authenticated",
-      "HuggingFace authentication failed",
-      "Failed to authenticate",
-      "Error:",
-      "Checking for existing vLLM",
-      "Cleared any existing",
-      "Starting vLLM server with model:",
-      "Starting vLLM",
-      "vLLM server starting",
-      "Waiting for vLLM",
-      "vLLM server is ready",
-      "Verifying vLLM process",
-      "Testing inference endpoint with prompt:",
-      "Inference response:",
-      "Inference test",
-      "Stopping vLLM server"
-    ];
+    const results: string[] = [];
+    let capturing = false;
     
-    return configurationLogs.filter(log => {
-      return debugPatterns.some(pattern => log.includes(pattern));
-    });
+    for (const log of configurationLogs) {
+      // Start capturing after "=== DEPLOYMENT LOG ==="
+      if (log.includes("=== DEPLOYMENT LOG ===")) {
+        capturing = true;
+        continue; // Don't include the header itself
+      }
+      
+      // Capture everything after the deployment log marker
+      if (capturing && log.trim() !== "") {
+        results.push(log);
+      }
+    }
+    
+    return results;
   };
 
   const handleExportLogs = () => {
@@ -475,17 +424,17 @@ export default function ApplyConfigurationForm({
     // Add deployment results
     fullContent += '\n=== DEPLOYMENT RESULTS ===\n\n';
     if (deploymentError) {
-      fullContent += `Status: ❌ Deployment Failed\n\n`;
+      fullContent += `Status: Deployment Failed\n\n`;
       fullContent += `${deploymentError}\n\n`;
     } else if (deploymentResults.length > 0) {
-      fullContent += `Status: ✅ Deployment Successful\n\n`;
+      fullContent += `Status: Deployment Successful\n\n`;
       fullContent += deploymentResults.join('\n');
       fullContent += '\n';
     }
     
     // Add debug logs if they exist
     if (debugLogs.length > 0) {
-      fullContent += '\n\n=== DEBUG OUTPUT ===\n\n';
+      fullContent += '\n\n=== DEPLOYMENT LOG ===\n\n';
       fullContent += debugLogs.join('\n');
       fullContent += '\n';
     }
@@ -687,9 +636,10 @@ export default function ApplyConfigurationForm({
               </div>
               
               {showLogs && (
-                <div className="bg-gradient-to-br from-neutral-900 to-black rounded-lg border border-neutral-700 overflow-hidden group">
+                <div className="bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 rounded-xl border-2 border-neutral-700/50 shadow-2xl overflow-hidden group hover:border-neutral-600/50 transition-all duration-300">
                   <div className="relative">
-                    <div className="p-6 max-h-96 overflow-y-auto">
+                    <div className="absolute inset-0 bg-gradient-to-b from-green-500/5 via-transparent to-transparent pointer-events-none"></div>
+                    <div className="relative p-8 max-h-96 overflow-y-auto custom-scrollbar">
                     {/* Error Display */}
                     {(deploymentError || configurationLogs.some(log => 
                       log.includes('failed') || 
@@ -722,69 +672,61 @@ export default function ApplyConfigurationForm({
                       // Get filtered deployment results
                       const resultLogs = getDeploymentResultsText();
                       
-                      // Group logs into sections
-                      const sections: { title: string; logs: string[]; }[] = [];
-                      let currentSection: { title: string; logs: string[]; } | null = null;
-                      
-                      resultLogs.forEach((log) => {
-                        if (log.includes("=== vLLM Server Configuration")) {
-                          currentSection = { title: "Status", logs: [] };
-                          sections.push(currentSection);
-                        } else if (log.includes("Configuration Details:")) {
-                          currentSection = { title: "Configuration Details", logs: [] };
-                          sections.push(currentSection);
-                        } else if (log.includes("Hardware Usage During Test:")) {
-                          currentSection = { title: "Hardware Usage", logs: [] };
-                          sections.push(currentSection);
-                        } else if (log.includes("Inference Test:")) {
-                          currentSection = { title: "Inference Test", logs: [] };
-                          sections.push(currentSection);
-                        } else if (log.includes("Advisor System Configuration:")) {
-                          currentSection = { title: "System Specification", logs: [] };
-                          sections.push(currentSection);
-                        } else if (log.includes("Configuration Validation:")) {
-                          currentSection = { title: "Validation", logs: [] };
-                          sections.push(currentSection);
-                        } else if (currentSection && !log.includes("===")) {
-                          currentSection.logs.push(log);
-                        }
-                      });
+                      // Filter out empty lines for display
+                      const displayLogs = resultLogs.filter(log => log.trim() !== "");
                       
                       return (
-                        <div className="space-y-6">
-                          {sections.map((section, sectionIndex) => (
-                            <div key={sectionIndex}>
-                              <div className="mb-3">
-                                <h4 className="text-sm font-semibold text-green-400 uppercase tracking-wide">{section.title}</h4>
+                        <div className="space-y-1">
+                          {displayLogs.map((log, logIndex) => {
+                            // Determine log styling based on content
+                            let className = "text-gray-300 text-sm leading-relaxed break-words";
+                            
+                            // Status line - Success
+                            if (log.includes("Status: Deployment Successful")) {
+                              className = "text-green-400 font-semibold text-base mb-4 mt-2 break-words flex items-center gap-2";
+                            }
+                            // Status line - Failed
+                            else if (log.includes("Status: Deployment Failed")) {
+                              className = "text-red-400 font-semibold text-base mb-4 mt-2 break-words flex items-center gap-2";
+                            }
+                            // Subsection headers (Workload details, System details, etc.)
+                            else if (log.trim().endsWith(":") && !log.startsWith("•")) {
+                              className = "text-emerald-400 font-bold text-base mt-5 mb-2 break-words tracking-wide";
+                            }
+                            // Bullet points - enhanced with better color and spacing
+                            else if (log.startsWith("•")) {
+                              // Check for special indicators within bullet points
+                              if (log.includes("matches recommended profile") || log.includes("within expected range") || log.includes("Actual usage vs expected")) {
+                                className = "text-green-300 font-medium text-sm ml-6 break-words leading-relaxed";
+                              } else if (log.includes("does not match") || log.includes("outside expected") || log.includes("GPU does not match")) {
+                                className = "text-red-300 font-medium text-sm ml-6 break-words leading-relaxed";
+                              } else {
+                                className = "text-gray-100 font-normal text-sm ml-6 break-words leading-relaxed";
+                              }
+                            }
+                            // Success indicators
+                            else if (log.includes("Yes!") || log.includes("Match: Yes")) {
+                              className = "text-green-400 font-semibold ml-4 break-words";
+                            }
+                            // Error/incompatible indicators  
+                            else if (log.includes("Match: No") || log.includes("Outside expected")) {
+                              className = "text-red-400 font-semibold ml-4 break-words";
+                            }
+                            // Comparison data
+                            else if (log.includes("Expected") || log.includes("Actual") || log.includes("Difference")) {
+                              className = "text-emerald-300 ml-4 break-words";
+                            }
+                            // Errors
+                            else if (log.includes("Error") && !log.includes("Expected")) {
+                              className = "text-red-400 font-semibold break-words";
+                            }
+                    
+                            return (
+                              <div key={logIndex} className={className}>
+                                {log}
                               </div>
-                              <div className="space-y-1.5 pl-4">
-                                {section.logs.map((log, logIndex) => {
-                                  // Determine log styling based on content
-                                  let className = "text-gray-300 text-sm leading-relaxed break-words";
-                                  
-                                  if (log.startsWith("•")) {
-                                    className = "text-gray-200 font-medium break-words";
-                                  } else if (log.includes("✅")) {
-                                    className = "text-green-400 break-words";
-                                  } else if (log.includes("⚠️")) {
-                                    className = "text-yellow-400 break-words";
-                                  } else if (log.includes("❌") || log.includes("Error")) {
-                                    className = "text-red-400 break-words";
-                                  } else if (log.includes("Model:") || log.includes("Status:") || log.includes("GPU Detected:")) {
-                                    className = "text-blue-300 font-medium break-words";
-                                  } else if (log.includes("Response Preview:") || log.includes("Query:")) {
-                                    className = "text-purple-300 font-mono text-xs bg-black/50 px-2 py-1.5 rounded block break-words";
-                                  }
-                        
-                        return (
-                                    <div key={logIndex} className={className}>
-                            {log}
-                          </div>
-                        );
-                                })}
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()}
@@ -808,7 +750,7 @@ export default function ApplyConfigurationForm({
             </div>
           )}
 
-          {/* Debug Output - Execution Steps */}
+          {/* Deployment Logs - Execution Steps */}
           {!isSubmitting && isConfigurationComplete && configurationLogs.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-3">
@@ -816,7 +758,7 @@ export default function ApplyConfigurationForm({
                   <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <h3 className="text-sm font-medium text-gray-300">Debug Output</h3>
+                  <h3 className="text-sm font-medium text-gray-300">Deployment Logs</h3>
                 </div>
                 <button
                   type="button"
@@ -880,11 +822,11 @@ export default function ApplyConfigurationForm({
                     <button
                       onClick={async () => {
                         const debugLogs = getDebugLogsText();
-                        const text = `Debug Output\n${"=".repeat(12)}\n${debugLogs.join("\n")}`;
+                        const text = `Deployment Logs\n${"=".repeat(16)}\n${debugLogs.join("\n")}`;
                         await copyToClipboard(text);
                       }}
                       className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-800 hover:bg-neutral-700 text-gray-400 hover:text-gray-200 p-1.5 rounded"
-                      title="Copy debug output"
+                      title="Copy deployment logs"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />

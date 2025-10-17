@@ -494,7 +494,7 @@ class VGPUConfigurationApplierDisabled:
                 port=request.ssh_port,
                 timeout=request.timeout
             ) as ssh_client:
-                yield "✅ SSH connection established successfully"
+                yield "SSH connection established successfully"
                 
                 # Verify system information
                 yield "\nGathering system information..."
@@ -508,7 +508,7 @@ class VGPUConfigurationApplierDisabled:
                 if status == 0:
                     yield f"GPU detected: {output}"
                 else:
-                    yield "⚠️ No GPU detected or nvidia-smi not available"
+                    yield "No GPU detected or nvidia-smi not available"
                 
                 # Apply configuration based on the provided settings
                 config = request.configuration
@@ -545,10 +545,10 @@ class VGPUConfigurationApplierDisabled:
                 for cmd in test_commands:
                     output, error, status = self.execute_command(ssh_client, cmd)
                     if status == 0 and output:
-                        yield f"✓ {cmd}: {output.split()[0] if output else 'OK'}"
+                        yield f"{cmd}: {output.split()[0] if output else 'OK'}"
                 
                 # Final configuration summary
-                yield "\n📊 Configuration Summary:"
+                yield "\nConfiguration Summary:"
                 yield f"  - vGPU Profile: {config.get('vGPU_profile', 'N/A')}"
                 yield f"  - vCPUs: {config.get('vCPU_count', 'N/A')}"
                 yield f"  - RAM: {config.get('system_RAM', 'N/A')}GB"
@@ -556,14 +556,14 @@ class VGPUConfigurationApplierDisabled:
                 yield f"  - Model: {config.get('model_name', 'N/A')}"
                 yield f"  - Storage: {config.get('storage_capacity', 'N/A')}GB {config.get('storage_type', '')}"
                 
-                yield "\n✅ vGPU configuration completed successfully!"
+                yield "\nvGPU configuration completed successfully!"
                 
         except Exception:  # was: paramiko.AuthenticationException
-            yield "❌ Authentication failed. Please check your credentials."
+            yield "Authentication failed. Please check your credentials."
         except Exception as e:  # was: paramiko.SSHException
-            yield f"❌ SSH connection error: {str(e)}"
+            yield f"SSH connection error: {str(e)}"
         except Exception as e:
-            yield f"❌ Error: {str(e)}"
+            yield f"Error: {str(e)}"
             self.logger.exception("Error during configuration application")
 
     def validate_configuration(self, configuration: Dict[str, Any]) -> bool:
@@ -1113,7 +1113,7 @@ class VGPUConfigurationApplierDisabled:
                 )):
                     yield msg
                 
-                steps_successful.append("✓ SSH connection established")
+                steps_successful.append("SSH connection established")
                 
                 # Step 0a: Validate HuggingFace token if provided
                 if request.hf_token:
@@ -1144,14 +1144,14 @@ class VGPUConfigurationApplierDisabled:
                             return
                         
                         logger.info(f"HuggingFace validation: {msg}")
-                        steps_successful.append("✓ HuggingFace token validated")
+                        steps_successful.append("HuggingFace token validated")
                         
                         async for msg_ok in yield_progress(ConfigurationProgress(
                             status="executing",
                             message=msg,
                             current_step=0,
                             total_steps=7,
-                            display_message="✅ HuggingFace credentials verified"
+                            display_message="HuggingFace credentials verified"
                         )):
                             yield msg_ok
                             
@@ -1172,7 +1172,7 @@ class VGPUConfigurationApplierDisabled:
                     message="Validating VM specifications against recommendations...",
                     current_step=0,
                     total_steps=7,
-                    display_message="📊 Checking if VM meets recommended specifications..."
+                    display_message="Checking if VM meets recommended specifications..."
                 )):
                     yield msg
                 
@@ -1197,12 +1197,12 @@ class VGPUConfigurationApplierDisabled:
                             yield msg_err
                         return
                     
-                    steps_successful.append("✓ VM specifications validated")
+                    steps_successful.append("VM specifications validated")
                     
                     # Show validation summary
                     vm_specs = validation_details.get('vm_specs', {})
                     summary = (
-                        f"✅ VM validated: "
+                        f"VM validated: "
                         f"{vm_specs.get('vcpu_count')}vCPU, "
                         f"{vm_specs.get('system_RAM')}GB RAM, "
                         f"{vm_specs.get('gpu_name', 'Unknown GPU')}"
@@ -1255,7 +1255,7 @@ class VGPUConfigurationApplierDisabled:
                             total_steps=5
                         )):
                             yield msg
-                        steps_successful.append(f"✓ System identified: {hypervisor_layer} on {os_info}")
+                        steps_successful.append(f"System identified: {hypervisor_layer} on {os_info}")
 
                     else:
                         async for msg in yield_progress(ConfigurationProgress(
@@ -1309,7 +1309,7 @@ class VGPUConfigurationApplierDisabled:
                 vgpu_profile = request.configuration.get("vgpu_profile", "N/A")
                 if vgpu_profile == "N/A":
                     logger.warning("No vGPU profile specified in configuration")
-                    steps_successful.append(f"⚠️  GPU detected: {detected_gpu_name} (no profile specified)")
+                    steps_successful.append(f"GPU detected: {detected_gpu_name} (no profile specified)")
                 else:
                     expected_prefix = vgpu_profile.split('-')[0]
                     
@@ -1326,7 +1326,7 @@ class VGPUConfigurationApplierDisabled:
                             total_steps=5
                         )):
                             yield msg
-                        steps_successful.append(f"✓ GPU verified: {detected_gpu_name}")
+                        steps_successful.append(f"GPU verified: {detected_gpu_name}")
                     else:
                         # GPU mismatch - this is a critical error
                         error_msg = (
@@ -1410,33 +1410,33 @@ class VGPUConfigurationApplierDisabled:
                     python3 -c "import ensurepip" >/dev/null 2>&1 || PYTHON_OK=1
 
                     if [ $PYTHON_OK -eq 1 ]; then
-                        echo "📦 Installing Python packages..."
+                        echo "Installing Python packages..."
                         echo "{request.password}" | sudo -S apt update
                         # Install both generic and version-specific packages
                         echo "{request.password}" | sudo -S apt install -y python3 python3-pip python3-venv python${{PYTHON_VERSION}}-venv
-                        echo "✅ Python packages installed"
+                        echo "Python packages installed"
                     else
-                        echo "✅ python3, python3-venv, and python3-pip are already installed"
+                        echo "python3, python3-venv, and python3-pip are already installed"
                     fi
 
                     # Check if venv exists AND has activate script
                     if test -f {VENV_PATH}/bin/activate; then
-                        echo "✅ Valid venv already exists at: {VENV_PATH}"
+                        echo "Valid venv already exists at: {VENV_PATH}"
                     else
                         # Remove incomplete venv if it exists
                         if test -d {VENV_PATH}; then
-                            echo "⚠️ Incomplete venv found, removing..."
+                            echo "Incomplete venv found, removing..."
                             rm -rf {VENV_PATH}
                         fi
                         
-                        echo "📦 Creating new venv at: {VENV_PATH}"
+                        echo "Creating new venv at: {VENV_PATH}"
                         python3 -m venv {VENV_PATH} 2>&1
                         
                         # Verify activate script was created
                         if test -f {VENV_PATH}/bin/activate; then
-                            echo "✅ venv created successfully"
+                            echo "venv created successfully"
                         else
-                            echo "❌ Failed to create valid venv - activate script missing"
+                            echo "Failed to create valid venv - activate script missing"
                             exit 1
                         fi
                     fi
@@ -1525,7 +1525,7 @@ class VGPUConfigurationApplierDisabled:
                     
                     # Authentication successful
                     logger.info("HuggingFace authentication successful")
-                    steps_successful.append("✓ HuggingFace authentication successful")
+                    steps_successful.append("HuggingFace authentication successful")
                     
                     test_results.append(CommandResult(
                         command="huggingface-cli login",
@@ -1606,14 +1606,14 @@ class VGPUConfigurationApplierDisabled:
                             
                             if verify_status == 0:
                                 logger.info(f"vLLM installed successfully in {elapsed}s")
-                                steps_successful.append(f"✓ vLLM installed successfully (took {elapsed}s)")
+                                steps_successful.append(f"vLLM installed successfully (took {elapsed}s)")
                                 
                                 async for msg in yield_progress(ConfigurationProgress(
                                     status="executing",
                                     message=f"vLLM installed successfully in {elapsed}s",
                                     current_step=4,
                                     total_steps=5,
-                                    display_message=f"✅ vLLM installation complete ({elapsed}s)"
+                                    display_message=f"vLLM installation complete ({elapsed}s)"
                                 )):
                                     yield msg
                                 break
@@ -1673,14 +1673,14 @@ class VGPUConfigurationApplierDisabled:
                 else:
                     # vLLM already installed
                     logger.info("vLLM is already installed")
-                    steps_successful.append("✓ vLLM already installed")
+                    steps_successful.append("vLLM already installed")
                     
                     async for msg in yield_progress(ConfigurationProgress(
                         status="executing",
                         message="vLLM already installed",
                         current_step=4,
                         total_steps=5,
-                        display_message="✅ vLLM already installed, skipping installation"
+                        display_message="vLLM already installed, skipping installation"
                     )):
                         yield msg
                     
@@ -1787,7 +1787,7 @@ class VGPUConfigurationApplierDisabled:
                             status="executing",
                             current_step=4,
                             total_steps=5,
-                            display_message=f"✅ vLLM server started successfully!"
+                            display_message=f"vLLM server started successfully!"
                         )):
                             yield msg
                         
@@ -1806,7 +1806,7 @@ class VGPUConfigurationApplierDisabled:
                             # Still consider it successful if the process started and allocated memory
                             logger.info(f"vLLM process is running with GPU memory allocated ({message_vllm})")
                         
-                        steps_successful.append(f"✓ vLLM configured optimally with gpu-memory-utilization={gpu_util:.2f}")
+                        steps_successful.append(f"vLLM configured optimally with gpu-memory-utilization={gpu_util:.2f}")
                         successful_gpu_mem = message_vllm  # Store the GPU memory allocation
                         break
                         
@@ -1841,9 +1841,9 @@ class VGPUConfigurationApplierDisabled:
                 if check_output and check_output.strip():
                     vllm_running = True
                     process_count = len(check_output.strip().split('\n'))
-                    logger.info(f"✅ vLLM process confirmed running ({process_count} process(es))")
+                    logger.info(f"vLLM process confirmed running ({process_count} process(es))")
                 else:
-                    logger.warning("⚠️ vLLM process not found in final check")
+                    logger.warning("vLLM process not found in final check")
                 
                 # If we successfully allocated GPU memory earlier, that's what matters
                 if successful_gpu_mem and not vllm_running:
@@ -1853,12 +1853,12 @@ class VGPUConfigurationApplierDisabled:
                 if successful_gpu_mem:
                     status_line = f"• Status: vLLM started and allocated {successful_gpu_mem}\n"
                     if not vllm_running:
-                        status_line += "  ⚠️  API endpoint is still initializing\n"
+                        status_line += "  API endpoint is still initializing\n"
                 else:
                     status_line = "• Status: Configuration attempted\n"
                 
                 summary_message = (
-                    "✅ vLLM server configuration completed!\n\n"
+                    "vLLM server configuration completed!\n\n"
                     "Configuration Details:\n"
                     f"• Model: {model_name}\n" +
                     status_line +
@@ -1897,7 +1897,7 @@ class VGPUConfigurationApplierDisabled:
                     test_response = llm.invoke(prompt)
                     logger.info(f"LLM Test: content={test_response.content} additional_kwargs={test_response.additional_kwargs} response_metadata={test_response.response_metadata}")
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to get response from LLM: {e}")
+                    logger.warning(f"Failed to get response from LLM: {e}")
 
                 # Final summary
                 async for msg in yield_progress(ConfigurationProgress(
@@ -2244,7 +2244,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             "status": "error",
             "message": message,
             "error": error,
-            "display_message": f"❌ {message}",
+            "display_message": f"{message}",
             "deployment_type": "local"
         })
     
@@ -2252,7 +2252,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         response = {
             "status": "success",
             "message": message,
-            "display_message": f"✅ {message}",
+            "display_message": f"{message}",
             "deployment_type": "local"
         }
         if data:
@@ -2290,6 +2290,16 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         gpu_util = config.get('gpu_memory_utilization', 0.40)  # Reduced from 0.46 to leave more memory headroom
         vgpu_profile = config.get('vgpu_profile', 'N/A')
         
+        # Determine workload type from description if available
+        description = config_request.description or ""
+        workload_type = "inference"  # default
+        if description:
+            desc_lower = description.lower()
+            if "rag" in desc_lower or "retrieval" in desc_lower:
+                workload_type = "RAG"
+            elif "fine-tun" in desc_lower or "training" in desc_lower:
+                workload_type = "training"
+        
         # Start deployment
         logger.info("=" * 80)
         logger.info(">>> LOCAL DOCKER DEPLOYMENT <<<")
@@ -2319,21 +2329,24 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         gpu_name = gpu_info[0].strip() if len(gpu_info) > 0 else "Unknown"
         gpu_memory = gpu_info[1].strip() if len(gpu_info) > 1 else "Unknown"
         
-        yield send_progress(f"✓ GPU detected: {gpu_name}, {gpu_memory}")
+        yield send_progress(f"GPU detected: {gpu_name}, {gpu_memory}")
         debug_logs.append(f"GPU detected: {gpu_name}, {gpu_memory}")
         
         # Get NVIDIA Driver version
         stdout, stderr, code = run_command("nvidia-smi --query-gpu=driver_version --format=csv,noheader")
         driver_version = stdout if code == 0 else "Unknown"
-        yield send_progress(f"✓ NVIDIA Driver: {driver_version}")
+        yield send_progress(f"NVIDIA Driver: {driver_version}")
         debug_logs.append(f"NVIDIA Driver: {driver_version}")
         
         # Validate GPU matches profile
+        gpu_matches = False
         if vgpu_profile != 'N/A':
             expected_prefix = vgpu_profile.split('-')[0]
             import difflib
             similarity = difflib.SequenceMatcher(None, expected_prefix, gpu_name).ratio()
             debug_logs.append(f"GPU matches requested profile: {vgpu_profile} (match score: {similarity:.2f})")
+            # Consider it a match if similarity is > 0.4 or if the expected prefix is in the GPU name
+            gpu_matches = similarity > 0.4 or expected_prefix.upper() in gpu_name.upper()
         
         # Step 3: Check if Docker is available
         yield send_progress("Step 3: Checking Docker installation...")
@@ -2342,16 +2355,16 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         if code != 0:
             yield send_error("Docker not found", "Please install Docker to use local deployment")
             return
-        yield send_progress(f"✓ {stdout}")
+        yield send_progress(f"{stdout}")
         debug_logs.append(f"Docker version: {stdout}")
         
         # Step 4: Authenticate with HuggingFace
         yield send_progress("Step 4: Authenticating with HuggingFace...")
         if hf_token:
-            yield send_progress("✓ HuggingFace token provided")
+            yield send_progress("HuggingFace token provided")
             debug_logs.append("HuggingFace token configured")
         else:
-            yield send_progress("⚠ No HuggingFace token provided (some models may not be accessible)")
+            yield send_progress("No HuggingFace token provided (some models may not be accessible)")
             debug_logs.append("Warning: No HuggingFace token")
         
         # Step 5: Stop and remove existing container if it exists
@@ -2360,7 +2373,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         container_name = "my_vllm_container"
         run_command(f"docker stop {container_name}", shell=True)
         run_command(f"docker rm {container_name}", shell=True)
-        yield send_progress("✓ Cleared any existing vLLM processes")
+        yield send_progress("Cleared any existing vLLM processes")
         debug_logs.append("Cleared any existing vLLM processes")
         
         # Step 6: Pull Docker image and start vLLM server
@@ -2387,7 +2400,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             return
         
         container_id = stdout[:12] if stdout else "unknown"
-        yield send_progress(f"✓ vLLM container started (Container ID: {container_id})")
+        yield send_progress(f"vLLM container started (Container ID: {container_id})")
         debug_logs.append(f"vLLM server starting (Container: {container_id})")
         
         # Step 8: Wait for vLLM to be ready
@@ -2406,11 +2419,11 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             stdout, _, code = run_command("curl -s http://172.18.0.1:8000/health 2>/dev/null || echo 'not ready'")
             
             if code == 0 and "not ready" not in stdout:
-                yield send_progress(f"✓ vLLM server is ready (took {elapsed}s)")
+                yield send_progress(f"vLLM server is ready (took {elapsed}s)")
                 debug_logs.append("vLLM server is ready")
                 break
             
-            yield send_progress(f"⏳ Waiting for vLLM to start listening on port 8000... ({elapsed}s elapsed)")
+            yield send_progress(f"Waiting for vLLM to start listening on port 8000... ({elapsed}s elapsed)")
             debug_logs.append(f"Waiting for vLLM to start listening on port 8000... ({elapsed}s elapsed)")
         
         if elapsed >= max_wait:
@@ -2452,7 +2465,6 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         # Step 10: Test inference endpoint
         yield send_progress("Step 10: Testing inference endpoint...")
         test_prompt = "Explain the concept of GPU virtualization in 2-3 sentences."
-        yield send_progress(f"Sending test prompt: {test_prompt}")
         debug_logs.append(f"Testing inference endpoint with prompt: {test_prompt}")
         
         curl_cmd = f"""curl -s -X POST "http://172.18.0.1:8000/v1/chat/completions" \
@@ -2466,13 +2478,13 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             try:
                 response_json = json.loads(stdout)
                 inference_response = response_json.get('choices', [{}])[0].get('message', {}).get('content', 'No response')
-                yield send_progress("✓ Inference test successful")
+                yield send_progress("Inference test successful")
                 debug_logs.append(f"Inference response: {inference_response}")
             except:
-                yield send_progress("✓ Inference test completed")
+                yield send_progress("Inference test completed")
                 debug_logs.append("Inference test completed successfully")
         else:
-            yield send_progress(f"⚠ Inference test had issues: {stderr}")
+            yield send_progress(f"Inference test had issues: {stderr}")
             debug_logs.append(f"Warning: Inference test had issues: {stderr}")
         
         # Step 11: Stop and remove container (cleanup)
@@ -2481,11 +2493,11 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         
         stdout_stop, stderr_stop, code_stop = run_command(f"docker stop {container_name}", shell=True)
         if code_stop == 0:
-            yield send_progress(f"✓ Container stopped")
+            yield send_progress(f"Container stopped")
         
         stdout_rm, stderr_rm, code_rm = run_command(f"docker rm {container_name}", shell=True)
         if code_rm == 0:
-            yield send_progress(f"✓ Container removed")
+            yield send_progress(f"Container removed")
         
         debug_logs.append("Container cleanup completed")
         
@@ -2493,52 +2505,63 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         yield send_progress("")
         yield send_progress("=== DEPLOYMENT RESULTS ===")
         yield send_progress("")
-        yield send_progress(f"NVIDIA Driver: {driver_version}")
-        yield send_progress("=== vLLM Server Configuration Completed Successfully ===")
+        yield send_progress("Status: Deployment Successful")
+        yield send_progress("")
+        yield send_progress("Workload details:")
+        yield send_progress(f"• Workload type: {workload_type}")
         yield send_progress(f"• Model: {model}")
-        yield send_progress(f"• Status: ✅ vLLM running and allocated {float(gpu_memory_used)/1024:.2f} GB" if gpu_memory_used != "Unknown" else "• Status: ✅ vLLM running")
-        yield send_progress(f"• GPU Detected: {gpu_name}")
+        yield send_progress(f"• vLLM running and allocated {float(gpu_memory_used)/1024:.2f} GB" if gpu_memory_used != "Unknown" else "• vLLM running")
         yield send_progress(f"• GPU Memory Utilization Setting: {int(gpu_util*100)}%")
         yield send_progress(f"• Max Model Length: {max_tokens} tokens")
         yield send_progress(f"• KV Cache: {kv_cache_tokens} tokens")
+        yield send_progress("System details:")
+        yield send_progress(f"• GPU Detected: {gpu_name}")
+        yield send_progress(f"• NVIDIA Driver: {driver_version}")
+        yield send_progress("")
         yield send_progress("Hardware Usage During Test:")
         yield send_progress(f"• GPU Compute Utilization: {gpu_compute}%")
         yield send_progress(f"• GPU Memory Active: {gpu_mem_active}%")
         yield send_progress(f"• GPU Temperature: {gpu_temp}°C")
         yield send_progress(f"• Power Draw: {power_draw}W / {power_limit}W")
-        yield send_progress("Advisor System Configuration:")
+        yield send_progress("")
+        yield send_progress("Factual vs Expected:")
         yield send_progress(f"• vGPU Profile: {vgpu_profile}")
         yield send_progress(f"• vCPUs: {config.get('vcpu_count', 'N/A')}")
         yield send_progress(f"• System RAM: {config.get('system_RAM', 'N/A')} GB")
-        yield send_progress(f"• GPU Memory Size: {config.get('gpu_memory_size', 'N/A')} GB")
-        yield send_progress("Configuration Validation:")
-        yield send_progress(f"✅ GPU matches recommended profile ({vgpu_profile})")
+        
+        # Initialize memory comparison variables
+        estimated_gb = 0
+        diff_pct = 0
+        memory_within_range = False
         
         if gpu_memory_used != "Unknown":
             estimated_gb = config.get('gpu_memory_size', 0)
             actual_gb = float(gpu_memory_used) / 1024
             if estimated_gb > 0:
-                usage_pct = (actual_gb / estimated_gb) * 100
-                yield send_progress(f"✅ GPU memory usage ({actual_gb:.1f}GB) within expected range ({estimated_gb}GB target)")
-                yield send_progress(f"Actual usage vs expected: {usage_pct:.0f}%")
+                diff_gb = actual_gb - estimated_gb
+                diff_pct = (diff_gb / estimated_gb * 100) if estimated_gb > 0 else 0
+                memory_within_range = abs(diff_pct) <= 20  # Within 20% tolerance
+                yield send_progress(f"• GPU memory usage ({actual_gb:.1f}GB) within expected range ({estimated_gb}GB target)")
+                yield send_progress(f"• Actual usage vs expected: {100 + diff_pct:.0f}%")
         
-        # Show inference test result
         yield send_progress("")
-        yield send_progress("Inference Test Result:")
-        yield send_progress(inference_response)
-        yield send_progress("")
+        yield send_progress("Results:")
+        if gpu_matches:
+            yield send_progress(f"• GPU matches recommended profile ({vgpu_profile})")
+        else:
+            yield send_progress(f"• GPU does not match recommended profile (Expected: {vgpu_profile}, Detected: {gpu_name})")
         
         # Add completion info to debug logs
         debug_logs.append("")
         debug_logs.append("Deployment completed successfully!")
         debug_logs.append("Stopping vLLM container (cleanup)...")
         debug_logs.append("")
-        debug_logs.append("✅ vLLM deployment successful")
+        debug_logs.append("vLLM deployment successful")
         
-        # Now output DEBUG OUTPUT at the end
+        # Now output DEPLOYMENT LOG at the end
         yield send_progress("")
         yield send_progress("")
-        yield send_progress("=== DEBUG OUTPUT ===")
+        yield send_progress("=== DEPLOYMENT LOG ===")
         yield send_progress("")
         for log in debug_logs:
             yield send_progress(log)
@@ -2730,7 +2753,7 @@ After running this command, click 'Test Connection' or try deployment again."""
             yield send_error("SSH Setup Required", setup_instructions)
             return
         
-        yield send_progress("✓ SSH connection successful")
+        yield send_progress("SSH connection successful")
         
         # Verify we can actually execute commands
         try:
@@ -3079,7 +3102,7 @@ After running this command, click 'Test Connection' or try deployment again."""
                         debug_info["gpu_metrics"]["baseline_used_mb"] = used_mem
                         baseline_gb = used_mem / 1024
                         logger.info(f"LOCAL DEPLOYMENT: Baseline GPU usage: {baseline_gb:.1f}GB (RAG/vector DB overhead)")
-                        yield send_progress(f"ℹ️  Existing GPU usage: {baseline_gb:.1f}GB (RAG, vector DB, etc.)")
+                        yield send_progress(f"Existing GPU usage: {baseline_gb:.1f}GB (RAG, vector DB, etc.)")
                     
                     logger.info(f"GPU memory before attempt {attempt}: {free_mem}MB free / {total_mem}MB total ({free_mem/total_mem*100:.1f}% free)")
                 except Exception as e:
@@ -3114,9 +3137,9 @@ After running this command, click 'Test Connection' or try deployment again."""
                         )
             
             if ports_cleared:
-                yield send_progress(f"✓ Cleared ports: {', '.join(map(str, ports_cleared))}")
+                yield send_progress(f"Cleared ports: {', '.join(map(str, ports_cleared))}")
             else:
-                yield send_progress("✓ All ports available")
+                yield send_progress("All ports available")
             
             yield send_progress(f"Starting vLLM (GPU util: {attempt_gpu_util:.0%}, max tokens: {adjusted_max_tokens})...")
             
@@ -3255,7 +3278,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                     if port_listening:
                         # Notify if using a different port than default
                         if actual_port != 8000 and elapsed < 15:  # Only log once early
-                            yield send_progress(f"ℹ️  Detected vLLM on port {actual_port}")
+                            yield send_progress(f"Detected vLLM on port {actual_port}")
                         
                         # Port is open, try health check on the detected port
                         # vLLM health endpoint returns HTTP 200 with empty body when healthy
@@ -3269,7 +3292,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                         # Check if HTTP status code is 200
                         if code == 0 and '200' in stdout:
                             server_ready = True
-                            yield send_progress(f"✓ vLLM server is ready on port {actual_port}!")
+                            yield send_progress(f"vLLM server is ready on port {actual_port}!")
                             break
                         else:
                             yield send_progress(f"Port {actual_port} is open, waiting for health check... ({elapsed}s elapsed, HTTP: {stdout})")
@@ -3475,16 +3498,15 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                 
                 # Determine configuration status
                 if vllm_running and successful_gpu_mem:
-                    status_line = f"  • Status: ✅ vLLM running and allocated {successful_gpu_mem}\n"
+                    status_line = f"  • Status: vLLM running and allocated {successful_gpu_mem}\n"
                 elif successful_gpu_mem:
-                    status_line = f"  • Status: ⚠️  vLLM allocated {successful_gpu_mem} but may be initializing\n"
+                    status_line = f"  • Status: vLLM allocated {successful_gpu_mem} but may be initializing\n"
                 else:
-                    status_line = "  • Status: ⚠️  vLLM started (memory allocation not confirmed)\n"
+                    status_line = "  • Status: vLLM started (memory allocation not confirmed)\n"
                 
                 # Generate configuration summary
                 summary_message = (
-                    "\n=== vLLM Server Configuration Completed Successfully ===\n\n"
-                    "Configuration Details:\n"
+                    "\nConfiguration Details:\n"
                     f"  • Model: {model}\n"
                     + status_line +
                     f"  • GPU Detected: {detected_gpu_name or 'Unknown'}\n"
@@ -3512,8 +3534,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                 summary_message += "\nAdvisor System Configuration:\n"
                 summary_message += f"  • vGPU Profile: {config.get('vgpu_profile', 'N/A')}\n"
                 summary_message += f"  • vCPUs: {config.get('vcpu_count', 'N/A')}\n"
-                summary_message += f"  • System RAM: {config.get('system_RAM', 'N/A')} GB\n"
-                summary_message += f"  • GPU Memory Size: {config.get('gpu_memory_size', 'N/A')} GB\n\n"
+                summary_message += f"  • System RAM: {config.get('system_RAM', 'N/A')} GB\n\n"
                 summary_message += "Configuration Validation:\n"
                 
                 # Add validation results with actual vs expected
@@ -3523,11 +3544,11 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                     gpu_memory_total = debug_info["gpu_metrics"].get("total_memory", "Unknown")
                     
                     if expected_prefix in detected_gpu_name:
-                        summary_message += f"  ✅ GPU Match\n"
+                        summary_message += f"  GPU Match\n"
                         summary_message += f"     • Detected: {detected_gpu_name} ({gpu_memory_total})\n"
                         summary_message += f"     • Expected: {profile}\n"
                     else:
-                        summary_message += f"  ⚠️  GPU Mismatch\n"
+                        summary_message += f"  GPU Mismatch\n"
                         summary_message += f"     • Detected: {detected_gpu_name} ({gpu_memory_total})\n"
                         summary_message += f"     • Expected: {profile}\n"
                 
@@ -3544,7 +3565,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                         total_gpu_mb = debug_info["gpu_metrics"].get("attempt_1_pre_start", {}).get("total_mb", 0)
                         total_gpu_gb = total_gpu_mb / 1024 if total_gpu_mb > 0 else 0
                         
-                        summary_message += f"  ✅ GPU Memory Allocation (Local)\n"
+                        summary_message += f"  GPU Memory Allocation (Local)\n"
                         summary_message += f"     • Total GPU: {total_gpu_gb:.1f}GB\n"
                         summary_message += f"     • Used by vLLM: ~{max(0, vllm_only_gb):.1f}GB\n"
                         summary_message += f"     • Baseline overhead: ~{baseline_gb:.1f}GB (RAG/vector DB)\n"
@@ -3555,7 +3576,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                             free_for_vllm_gb = (total_gpu_mb / 1024) - baseline_gb
                             remaining_gb = total_gpu_gb - actual_gb
                             if free_for_vllm_gb < 10:
-                                summary_message += f"     • ⚠️  Limited free memory: {remaining_gb:.1f}GB remaining\n"
+                                summary_message += f"     • Limited free memory: {remaining_gb:.1f}GB remaining\n"
                             else:
                                 summary_message += f"     • Free memory: {remaining_gb:.1f}GB remaining\n"
                     elif estimated_vram:
@@ -3570,7 +3591,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                         total_gpu_gb = total_gpu_mb / 1024 if total_gpu_mb > 0 else 0
                         
                         if 0.8 <= ratio <= 1.2:
-                            summary_message += f"  ✅ GPU Memory Allocation (VM)\n"
+                            summary_message += f"  GPU Memory Allocation (VM)\n"
                             summary_message += f"     • Total GPU: {total_gpu_gb:.1f}GB\n"
                             summary_message += f"     • Used by vLLM: {actual_gb:.1f}GB\n"
                             summary_message += f"     • Expected: ~{expected_gb:.1f}GB\n"
@@ -3579,12 +3600,12 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                                 remaining_gb = total_gpu_gb - actual_gb
                                 summary_message += f"     • Free memory: {remaining_gb:.1f}GB remaining\n"
                         elif ratio > 1.2:
-                            summary_message += f"  ⚠️  GPU Memory Higher Than Expected (VM)\n"
+                            summary_message += f"  GPU Memory Higher Than Expected (VM)\n"
                             summary_message += f"     • Used by vLLM: {actual_gb:.1f}GB\n"
                             summary_message += f"     • Expected: ~{expected_gb:.1f}GB\n"
                             summary_message += f"     • Difference: {diff_gb:+.1f}GB ({diff_pct:+.1f}%)\n"
                         else:
-                            summary_message += f"  ℹ️  GPU Memory Lower Than Expected (VM)\n"
+                            summary_message += f"  GPU Memory Lower Than Expected (VM)\n"
                             summary_message += f"     • Used by vLLM: {actual_gb:.1f}GB\n"
                             summary_message += f"     • Expected: ~{expected_gb:.1f}GB\n"
                             summary_message += f"     • Difference: {diff_gb:+.1f}GB ({diff_pct:+.1f}%)\n"
@@ -3592,7 +3613,7 @@ nohup bash -c 'source {venv_path}/bin/activate && \
                         # No estimate available
                         total_gpu_mb = debug_info["gpu_metrics"].get("attempt_1_pre_start", {}).get("total_mb", 0)
                         total_gpu_gb = total_gpu_mb / 1024 if total_gpu_mb > 0 else 0
-                        summary_message += f"  ℹ️  GPU Memory Allocation\n"
+                        summary_message += f"  GPU Memory Allocation\n"
                         summary_message += f"     • Used by vLLM: {actual_gb:.1f}GB\n"
                         if total_gpu_gb > 0:
                             summary_message += f"     • Total GPU: {total_gpu_gb:.1f}GB\n"
