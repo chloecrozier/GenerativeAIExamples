@@ -2292,13 +2292,13 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         
         # Determine workload type from description if available
         description = config_request.description or ""
-        workload_type = "inference"  # default
+        workload_type = "Inference"  # default
         if description:
             desc_lower = description.lower()
             if "rag" in desc_lower or "retrieval" in desc_lower:
                 workload_type = "RAG"
             elif "fine-tun" in desc_lower or "training" in desc_lower:
-                workload_type = "training"
+                workload_type = "Training"
         
         # Start deployment
         logger.info("=" * 80)
@@ -2551,13 +2551,6 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
         else:
             yield send_progress(f"• GPU does not match recommended profile (Expected: {vgpu_profile}, Detected: {gpu_name})")
         
-        # Add completion info to debug logs
-        debug_logs.append("")
-        debug_logs.append("Deployment completed successfully!")
-        debug_logs.append("Stopping vLLM container (cleanup)...")
-        debug_logs.append("")
-        debug_logs.append("vLLM deployment successful")
-        
         # Now output DEPLOYMENT LOG at the end
         yield send_progress("")
         yield send_progress("")
@@ -2567,7 +2560,7 @@ async def deploy_vllm_local(config_request) -> AsyncGenerator[str, None]:
             yield send_progress(log)
         
         # Send final success message
-        yield send_success("vLLM deployment completed successfully", {
+        yield send_success("Deployment completed successfully", {
             "endpoint": "http://localhost:8000",
             "model": model,
             "container": container_name,

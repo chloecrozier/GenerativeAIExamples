@@ -427,7 +427,6 @@ export default function ApplyConfigurationForm({
       fullContent += `Status: Deployment Failed\n\n`;
       fullContent += `${deploymentError}\n\n`;
     } else if (deploymentResults.length > 0) {
-      fullContent += `Status: Deployment Successful\n\n`;
       fullContent += deploymentResults.join('\n');
       fullContent += '\n';
     }
@@ -681,23 +680,15 @@ export default function ApplyConfigurationForm({
                             // Determine log styling based on content
                             let className = "text-gray-300 text-sm leading-relaxed break-words";
                             
-                            // Status line - Success
-                            if (log.includes("Status: Deployment Successful")) {
-                              className = "text-green-400 font-semibold text-base mb-4 mt-2 break-words flex items-center gap-2";
-                            }
-                            // Status line - Failed
-                            else if (log.includes("Status: Deployment Failed")) {
-                              className = "text-red-400 font-semibold text-base mb-4 mt-2 break-words flex items-center gap-2";
-                            }
                             // Subsection headers (Workload details, System details, etc.)
-                            else if (log.trim().endsWith(":") && !log.startsWith("•")) {
+                            if (log.trim().endsWith(":") && !log.startsWith("•")) {
                               className = "text-emerald-400 font-bold text-base mt-5 mb-2 break-words tracking-wide";
                             }
                             // Bullet points - enhanced with better color and spacing
                             else if (log.startsWith("•")) {
                               // Check for special indicators within bullet points
                               if (log.includes("matches recommended profile") || log.includes("within expected range") || log.includes("Actual usage vs expected")) {
-                                className = "text-green-300 font-medium text-sm ml-6 break-words leading-relaxed";
+                                className = "text-white font-medium text-sm ml-6 break-words leading-relaxed";
                               } else if (log.includes("does not match") || log.includes("outside expected") || log.includes("GPU does not match")) {
                                 className = "text-red-300 font-medium text-sm ml-6 break-words leading-relaxed";
                               } else {
