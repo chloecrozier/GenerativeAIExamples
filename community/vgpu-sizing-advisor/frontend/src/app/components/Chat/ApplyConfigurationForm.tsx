@@ -69,6 +69,8 @@ export default function ApplyConfigurationForm({
   const [testMetrics, setTestMetrics] = useState<any>(null);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [copiedResults, setCopiedResults] = useState(false);
+  const [copiedLogs, setCopiedLogs] = useState(false);
 
   // Validate IP address format
   const validateIpAddress = (ip: string): boolean => {
@@ -310,6 +312,8 @@ export default function ApplyConfigurationForm({
     setShowLogs(false);
     setShowDebugLogs(false);
     setCurrentDisplayMessage("");
+    setCopiedResults(false);
+    setCopiedLogs(false);
     // Form data is intentionally preserved
   };
 
@@ -333,6 +337,8 @@ export default function ApplyConfigurationForm({
     setCurrentDisplayMessage("");
     setTestMetrics(null);
     setDeploymentError(null);
+    setCopiedResults(false);
+    setCopiedLogs(false);
     
     onClose();
   };
@@ -661,10 +667,8 @@ export default function ApplyConfigurationForm({
               </div>
               
               {showLogs && (
-                <div className="bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 rounded-xl border-2 border-neutral-700/50 shadow-2xl overflow-hidden group hover:border-neutral-600/50 transition-all duration-300">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-b from-green-500/5 via-transparent to-transparent pointer-events-none"></div>
-                    <div className="relative p-8 max-h-96 overflow-y-auto custom-scrollbar">
+                <div className="relative bg-neutral-900 rounded-lg border border-neutral-700">
+                  <div className="p-8 max-h-96 overflow-y-auto custom-scrollbar">
                     {/* Error Display */}
                     {(deploymentError || configurationLogs.some(log => 
                       log.includes('failed') || 
@@ -751,14 +755,26 @@ export default function ApplyConfigurationForm({
                         </div>
                       );
                     })()}
-                    </div>
+                  </div>
+                  {/* Copy button and message - fixed at bottom */}
+                  <div className="relative p-3 bg-neutral-900">
+                    {copiedResults && (
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 text-green-400 text-xs bg-neutral-800/90 px-3 py-1.5 rounded border border-green-500/30">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied to clipboard
+                      </div>
+                    )}
                     <button
                       onClick={async () => {
                         const deploymentResults = getDeploymentResultsText();
                         const text = `Deployment Results\n${"=".repeat(18)}\n${deploymentResults.join("\n")}`;
                         await copyToClipboard(text);
+                        setCopiedResults(true);
+                        setTimeout(() => setCopiedResults(false), 2000);
                       }}
-                      className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-800 hover:bg-neutral-700 text-gray-400 hover:text-gray-200 p-1.5 rounded"
+                      className="absolute bottom-3 right-3 p-2 bg-neutral-800 hover:bg-neutral-700 rounded transition-colors border border-neutral-600 text-gray-400 hover:text-gray-200"
                       title="Copy deployment results"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -800,10 +816,9 @@ export default function ApplyConfigurationForm({
               </div>
               
               {showDebugLogs && (
-                <div className="bg-black rounded-lg border border-neutral-800 overflow-hidden group">
-                  <div className="relative">
-                    <div className="p-4 max-h-80 overflow-y-auto">
-                  <div className="space-y-1 font-mono text-xs">
+                <div className="relative bg-black rounded-lg border border-neutral-800">
+                  <div className="p-4 max-h-80 overflow-y-auto">
+                    <div className="space-y-1 font-mono text-xs">
                     {(() => {
                           // Get filtered debug logs
                           const debugLogs = getDebugLogsText();
@@ -838,15 +853,27 @@ export default function ApplyConfigurationForm({
                         );
                       });
                     })()}
-                      </div>
                     </div>
+                  </div>
+                  {/* Copy button and message - fixed at bottom */}
+                  <div className="relative p-3 bg-black">
+                    {copiedLogs && (
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 text-green-400 text-xs font-mono bg-neutral-800/90 px-3 py-1.5 rounded border border-green-500/30">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied to clipboard
+                      </div>
+                    )}
                     <button
                       onClick={async () => {
                         const debugLogs = getDebugLogsText();
                         const text = `Deployment Logs\n${"=".repeat(16)}\n${debugLogs.join("\n")}`;
                         await copyToClipboard(text);
+                        setCopiedLogs(true);
+                        setTimeout(() => setCopiedLogs(false), 2000);
                       }}
-                      className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-800 hover:bg-neutral-700 text-gray-400 hover:text-gray-200 p-1.5 rounded"
+                      className="absolute bottom-3 right-3 p-2 bg-neutral-800 hover:bg-neutral-700 rounded transition-colors border border-neutral-600 text-gray-400 hover:text-gray-200"
                       title="Copy deployment logs"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

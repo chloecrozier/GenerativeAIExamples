@@ -476,32 +476,6 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
 
   return (
     <div className="bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden shadow-lg">
-      {/* Header with controls */}
-      <div className="bg-neutral-800 border-b border-neutral-700 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {vramUsage && vramUsage.numGPUs > 1 && (
-              <div className="px-3 py-1 bg-[#76b900]/20 backdrop-blur-sm rounded-full border border-[#76b900]/30">
-                <span className="text-sm font-medium flex items-center gap-1.5 text-[#76b900]">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
-                  {vramUsage.numGPUs} GPUs
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        {copied && (
-          <div className="mt-2 text-sm text-green-400 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            Copied to clipboard
-          </div>
-        )}
-      </div>
-
       {/* Content */}
       {isExpanded && (
         <div className="p-6">
@@ -592,6 +566,14 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
                       <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap pr-16 pb-12">
                         {JSON.stringify(config, null, 2)}
                       </pre>
+                      {copied && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 text-green-400 text-xs font-mono bg-neutral-800/90 px-3 py-1.5 rounded border border-green-500/30">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Copied to clipboard
+                        </div>
+                      )}
                       {/* Copy button - bottom right (JSON view only) */}
                       <button
                         onClick={handleCopy}
