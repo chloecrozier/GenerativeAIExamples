@@ -58,10 +58,10 @@ export default function WorkloadConfigWizard({
     batchSize: "",
     promptSize: "1024",
     responseSize: "256",
-    embeddingModel: "",
-    gpuInventory: {},
-    precision: "",
-    vectorDimension: "384",  // Default to 384
+    embeddingModel: "nvidia/nvolveqa-embed-large-1B",
+    gpuInventory: { "DC": 1 },
+    precision: "fp16",
+    vectorDimension: "1024",  // Default to 1024 (matches default embedding model)
     numberOfVectors: "10000", // Default to 10,000
     advancedConfig: {
       modelMemoryOverhead: 1.3,
@@ -77,6 +77,8 @@ export default function WorkloadConfigWizard({
   const [dynamicModels, setDynamicModels] = useState<Array<{ value: string; label: string; modelTag: string }>>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  const [showPromptTooltip, setShowPromptTooltip] = useState(false);
+  const [showResponseTooltip, setShowResponseTooltip] = useState(false);
 
   // Fetch dynamic models from backend on mount
   useEffect(() => {
@@ -130,12 +132,12 @@ export default function WorkloadConfigWizard({
   ];
 
   const embeddingModels = [
-    { value: "nvidia/nvolveqa-embed-large-1B", label: "nvidia/nvolveqa-embed-large-1B", desc: "1B parameter embedding model" },
-    { value: "text-embedding-ada-002-350M", label: "text-embedding-ada-002-350M", desc: "350M parameter OpenAI embedding model" },
-    { value: "nvidia/nvolveqa-embed-base-400M", label: "nvidia/nvolveqa-embed-base-400M", desc: "400M parameter embedding model" },
-    { value: "nvidia/nemo-embed-qa-200M", label: "nvidia/nemo-embed-qa-200M", desc: "200M parameter QA embedding model" },
-    { value: "all-MiniLM-L6-v2-80M", label: "all-MiniLM-L6-v2-80M", desc: "80M parameter compact embedding model" },
-    { value: "llama-3-2-nv-embedqa-1b-v2", label: "llama-3-2-nv-embedqa-1b-v2", desc: "Llama 3.2 based embedding model" }
+    { value: "nvidia/nvolveqa-embed-large-1B", label: "nvidia/nvolveqa-embed-large-1B", desc: "1B parameter embedding model", dimension: 1024 },
+    { value: "text-embedding-ada-002-350M", label: "text-embedding-ada-002-350M", desc: "350M parameter OpenAI embedding model", dimension: 1536 },
+    { value: "nvidia/nvolveqa-embed-base-400M", label: "nvidia/nvolveqa-embed-base-400M", desc: "400M parameter embedding model", dimension: 768 },
+    { value: "nvidia/nemo-embed-qa-200M", label: "nvidia/nemo-embed-qa-200M", desc: "200M parameter QA embedding model", dimension: 768 },
+    { value: "all-MiniLM-L6-v2-80M", label: "all-MiniLM-L6-v2-80M", desc: "80M parameter compact embedding model", dimension: 384 },
+    { value: "llama-3-2-nv-embedqa-1b-v2", label: "llama-3-2-nv-embedqa-1b-v2", desc: "Llama 3.2 based embedding model", dimension: 1024 }
   ];
 
   const performanceLevels = [
@@ -146,11 +148,11 @@ export default function WorkloadConfigWizard({
   ];
 
   const availableGPUInventory = [
+    { value: "DC", label: "NVIDIA RTX Pro 6000 BSE", desc: "96GB GDDR7 with ECC, Blackwell, passive‑cooled dual‑slot PCIe Gen5 – Enterprise AI/graphics, scientific computing & virtual workstations" },
     { value: "l40s", label: "NVIDIA L40S", desc: "48GB GDDR6 with ECC, Ada Lovelace, 350W - ML training & inference + virtual workstations" },
     { value: "l40", label: "NVIDIA L40", desc: "48GB GDDR6 with ECC, Ada Lovelace - Virtual workstations & compute workloads" },
     { value: "l4", label: "NVIDIA L4", desc: "24GB GDDR6 with ECC, Ada Lovelace, 72W - AI inference, small model training & 3D graphics" },
     { value: "a40", label: "NVIDIA A40", desc: "48GB GDDR6 with ECC, Ampere, 300W - 3D design & mixed virtual workstation workloads" },
-    { value: "DC", label: "NVIDIA RTX PRO 6000 Blackwell Server Edition (Refer as DC)", desc: "96GB GDDR7 with ECC, Blackwell, passive‑cooled dual‑slot PCIe Gen5 – Enterprise AI/graphics, scientific computing & virtual workstations" },
   ];
 
   // Fallback hardcoded models in case dynamic fetch fails
@@ -171,11 +173,24 @@ export default function WorkloadConfigWizard({
 
   const precisionOptions = [
     { value: "fp16", label: "FP16", desc: "Half precision - Recommended balance of performance and accuracy" },
-    { value: "int8", label: "INT-8", desc: "8-bit integer - Highest performance, some accuracy trade-off" },
+    { value: "fp8", label: "FP8", desc: "8-bit floating point - Higher performance with good accuracy" },
+    { value: "fp4", label: "FP4", desc: "4-bit floating point - Maximum performance, lower accuracy" },
   ];
 
   const handleInputChange = (field: keyof WorkloadConfig, value: string) => {
-    setConfig((prev: WorkloadConfig) => ({ ...prev, [field]: value }));
+    setConfig((prev: WorkloadConfig) => {
+      const newConfig = { ...prev, [field]: value };
+      
+      // Auto-set vector dimension when embedding model changes
+      if (field === 'embeddingModel') {
+        const selectedModel = embeddingModels.find(m => m.value === value);
+        if (selectedModel && selectedModel.dimension) {
+          newConfig.vectorDimension = selectedModel.dimension.toString();
+        }
+      }
+      
+      return newConfig;
+    });
   };
 
   const handleAdvancedConfigChange = (field: keyof AdvancedConfig, value: number) => {
@@ -204,6 +219,27 @@ export default function WorkloadConfigWizard({
     return Object.values(config.gpuInventory).reduce((sum, count) => {
       return sum + (count as number);
     }, 0);
+  };
+
+  // Map model size categories to actual models for vLLM deployment
+  const getDefaultModelForSize = (sizeCategory: string): { value: string; label: string; modelTag: string } => {
+    switch (sizeCategory) {
+      case 'small':
+        // Use a small, fast model for < 7B
+        return { value: "mistral-7b", label: "Mistral-7B", modelTag: "mistralai/Mistral-7B-Instruct-v0.3" };
+      case 'medium':
+        // Use a medium model for 7B-30B
+        return { value: "llama-3.1-8b", label: "Llama-3.1-8B", modelTag: "meta-llama/Llama-3.1-8B-Instruct" };
+      case 'large':
+        // Use a large model for 40B-70B
+        return { value: "llama-3.1-70b", label: "Llama-3.1-70B", modelTag: "meta-llama/Llama-3.3-70B-Instruct" };
+      case 'xlarge':
+        // Use an extra large model for 70B+
+        return { value: "falcon-180b", label: "Falcon-180B", modelTag: "tiiuae/falcon-180B" };
+      default:
+        // Default to a small model
+        return { value: "mistral-7b", label: "Mistral-7B", modelTag: "mistralai/Mistral-7B-Instruct-v0.3" };
+    }
   };
 
   const getRecommendedEmbeddingModel = (): string => {
@@ -277,14 +313,18 @@ export default function WorkloadConfigWizard({
         });
       parts.push(`using available GPU inventory: ${gpuLabels.join(', ')}`);
     } else {
-      // Recommended GPU (L40S) if no GPU is selected
-      parts.push(`using available GPU inventory: 1x NVIDIA L40S`);
+      // Default GPU (RTX Pro 6000 BSE) if no GPU is selected
+      parts.push(`using available GPU inventory: 1x NVIDIA RTX Pro 6000 BSE`);
     }
     
     // Specific Model - use full HuggingFace model tag
     if (config.specificModel && config.specificModel !== 'unknown') {
       const modelTag = specificModels.find(m => m.value === config.specificModel)?.modelTag || config.specificModel;
       parts.push(`running ${modelTag}`);
+    } else if (config.specificModel === 'unknown' && config.modelSize) {
+      // If "unknown" is selected, use the default model for the selected size category
+      const defaultModel = getDefaultModelForSize(config.modelSize);
+      parts.push(`running ${defaultModel.modelTag}`);
     }
     
     // Performance requirements
@@ -341,10 +381,19 @@ export default function WorkloadConfigWizard({
     
     // EMBED THE STRUCTURED CONFIG DATA AS JSON
     // This preserves all the original user selections
+    // Determine the model tag to use
+    let modelTagToUse = null;
+    if (config.specificModel && config.specificModel !== 'unknown') {
+      modelTagToUse = specificModels.find(m => m.value === config.specificModel)?.modelTag || null;
+    } else if (config.specificModel === 'unknown' && config.modelSize) {
+      // Use default model for the size category
+      modelTagToUse = getDefaultModelForSize(config.modelSize).modelTag;
+    }
+    
     const structuredConfig = {
       workloadType: config.workloadType,
       specificModel: config.specificModel,
-      modelTag: config.specificModel ? specificModels.find(m => m.value === config.specificModel)?.modelTag : null,
+      modelTag: modelTagToUse,
       modelSize: config.modelSize,
       batchSize: config.batchSize,
       promptSize: config.promptSize ? parseInt(config.promptSize) : 1024,
@@ -358,7 +407,7 @@ export default function WorkloadConfigWizard({
         numberOfVectors: config.numberOfVectors ? parseInt(config.numberOfVectors) : null,
       }),
       // Add computed values for easier backend processing
-      selectedGPU: Object.keys(config.gpuInventory)[0] || 'l40s',
+      selectedGPU: Object.keys(config.gpuInventory)[0] || 'DC',
       gpuCount: Object.values(config.gpuInventory)[0] as number || 1,
       // Include advanced configuration
       advancedConfig: config.advancedConfig,
@@ -380,10 +429,10 @@ export default function WorkloadConfigWizard({
       batchSize: "",
       promptSize: "1024",
       responseSize: "256",
-      embeddingModel: "",
-      gpuInventory: {},
-      precision: "",
-      vectorDimension: "384",  // Default to 384
+      embeddingModel: "nvidia/nvolveqa-embed-large-1B",
+      gpuInventory: { "DC": 1 },
+      precision: "fp16",
+      vectorDimension: "1024",  // Default to 1024 (matches default embedding model)
       numberOfVectors: "10000", // Default to 10,000
       advancedConfig: {
         modelMemoryOverhead: 1.3,
@@ -540,7 +589,6 @@ export default function WorkloadConfigWizard({
                         onChange={(e) => handleInputChange("embeddingModel", e.target.value)}
                         className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white"
                       >
-                        <option value="">Recommended ({getRecommendedEmbeddingModel()})</option>
                         {embeddingModels.map((model) => (
                           <option key={model.value} value={model.value}>{model.label}</option>
                         ))}
@@ -548,11 +596,6 @@ export default function WorkloadConfigWizard({
                       {config.embeddingModel && (
                         <p className="text-sm text-gray-400 mt-2">
                           {embeddingModels.find(m => m.value === config.embeddingModel)?.desc}
-                        </p>
-                      )}
-                      {!config.embeddingModel && (
-                        <p className="text-sm text-gray-400 mt-2">
-                          {embeddingModels.find(m => m.value === getRecommendedEmbeddingModel())?.desc}
                         </p>
                       )}
                     </div>
@@ -566,7 +609,6 @@ export default function WorkloadConfigWizard({
                         onChange={(e) => handleInputChange("precision", e.target.value)}
                         className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white"
                       >
-                        <option value="">Recommended (FP16)</option>
                         {precisionOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
@@ -590,18 +632,14 @@ export default function WorkloadConfigWizard({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">Vector Dimension</label>
-                          <select
+                          <input
+                            type="text"
                             value={config.vectorDimension || ""}
-                            onChange={(e) => handleInputChange("vectorDimension", e.target.value)}
-                            className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white"
-                          >
-                            <option value="">Select dimension</option>
-                            <option value="384">384 (Compact)</option>
-                            <option value="768">768 (Standard)</option>
-                            <option value="1024">1024 (Large)</option>
-                          </select>
-                          <p className="text-sm text-gray-400 mt-1">
-                            Must match your embedding model's output dimension
+                            disabled
+                            className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-gray-400 cursor-not-allowed"
+                          />
+                          <p className="text-sm text-gray-500 mt-1">
+                            Automatically set based on your selected embedding model
                           </p>
                         </div>
 
@@ -630,12 +668,50 @@ export default function WorkloadConfigWizard({
 
           {/* Step 3: Additional Requirements */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Additional Requirements (Optional)</h3>
+            <div className="space-y-5">
+              <h3 className="text-lg font-semibold text-white mb-3">Additional Requirements</h3>
               
+              {/* GPU Selection Section */}
+              <div>
+                <h4 className="text-sm font-medium text-white mb-2">GPU Selection</h4>
+                
+                <select
+                  value={Object.keys(config.gpuInventory)[0] || "DC"}
+                  onChange={(e) => {
+                    // Clear existing inventory and set the new one
+                    setConfig(prev => ({
+                      ...prev,
+                      gpuInventory: e.target.value ? { [e.target.value]: 1 } : { "DC": 1 }
+                    }));
+                  }}
+                  className="w-full px-3 py-2 rounded-md bg-neutral-800 border border-neutral-700 text-white text-sm focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
+                >
+                  {availableGPUInventory.map((gpu) => (
+                    <option key={gpu.value} value={gpu.value}>
+                      {gpu.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Prompt Size (tokens)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                    Prompt Size (
+                    <span 
+                      className="relative text-green-500 underline decoration-dotted"
+                      onMouseEnter={() => setShowPromptTooltip(true)}
+                      onMouseLeave={() => setShowPromptTooltip(false)}
+                    >
+                      tokens
+                      {showPromptTooltip && (
+                        <span className="absolute left-0 top-full mt-2 w-64 p-3 bg-neutral-800 border border-neutral-600 rounded-lg shadow-lg text-xs text-gray-300 font-normal z-50 leading-relaxed">
+                          Prompt tokens are the input you send to the AI model. This includes your question, context, and any instructions. More tokens = longer inputs you can process. Typical: 1024-4096 tokens (~750-3000 words).
+                        </span>
+                      )}
+                    </span>
+                    )
+                  </label>
                   <input
                     type="number"
                     value={config.promptSize}
@@ -644,15 +720,30 @@ export default function WorkloadConfigWizard({
                     min="256"
                     max="32768"
                     step="256"
-                    className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white placeholder-gray-500"
+                    className="w-full px-3 py-2 rounded-md bg-neutral-800 border border-neutral-700 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                   />
-                  <p className="text-sm text-gray-400 mt-1">
-                    Maximum input prompt length in tokens
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum input prompt length
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Response Size (tokens)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                    Response Size (
+                    <span 
+                      className="relative text-green-500 underline decoration-dotted"
+                      onMouseEnter={() => setShowResponseTooltip(true)}
+                      onMouseLeave={() => setShowResponseTooltip(false)}
+                    >
+                      tokens
+                      {showResponseTooltip && (
+                        <span className="absolute left-0 top-full mt-2 w-64 p-3 bg-neutral-800 border border-neutral-600 rounded-lg shadow-lg text-xs text-gray-300 font-normal z-50 leading-relaxed">
+                          Response tokens are the AI-generated output. This is the length of answers the model will generate. More tokens = longer, more detailed responses. Typical: 256-1024 tokens (~200-750 words).
+                        </span>
+                      )}
+                    </span>
+                    )
+                  </label>
                   <input
                     type="number"
                     value={config.responseSize}
@@ -661,74 +752,30 @@ export default function WorkloadConfigWizard({
                     min="128"
                     max="8192"
                     step="128"
-                    className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white placeholder-gray-500"
+                    className="w-full px-3 py-2 rounded-md bg-neutral-800 border border-neutral-700 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                   />
-                  <p className="text-sm text-gray-400 mt-1">
-                    Maximum response length in tokens
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum response length
                   </p>
                 </div>
               </div>
 
-              {/* GPU Selection Section */}
-              <div className="mt-6 pt-6 border-t border-neutral-700">
-                <h4 className="text-md font-semibold text-white mb-4">GPU Selection</h4>
-                <p className="text-sm text-gray-400 mb-4">
-                  Select the GPU you want to use. If you don't select a GPU, the recommended NVIDIA L40S will be used.
-                </p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">GPU Model</label>
-                    <select
-                      value={Object.keys(config.gpuInventory)[0] || ""}
-                      onChange={(e) => {
-                        // Clear existing inventory and set the new one
-                        setConfig(prev => ({
-                          ...prev,
-                          gpuInventory: e.target.value ? { [e.target.value]: 1 } : {}
-                        }));
-                      }}
-                      className="w-full p-3 rounded-lg bg-neutral-800 border border-neutral-600 text-white"
-                    >
-                      <option value="">Recommended (NVIDIA L40S)</option>
-                      {availableGPUInventory.map((gpu) => (
-                        <option key={gpu.value} value={gpu.value}>
-                          {gpu.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                
-                {/* Show selected GPU description */}
-                {Object.keys(config.gpuInventory)[0] && (
-                  <div className="mt-3 p-3 bg-neutral-800 border border-neutral-600 rounded-lg">
-                    <p className="text-sm text-gray-400">
-                      {availableGPUInventory.find(g => g.value === Object.keys(config.gpuInventory)[0])?.desc}
-                    </p>
-                  </div>
-                )}
-              </div>
-
               {/* Advanced Configuration Dropdown */}
-              <div className="mt-6 pt-6 border-t border-neutral-700">
+              <div className="mt-6">
                 <button
                   type="button"
                   onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
-                  className="w-full flex items-center justify-between p-4 bg-neutral-800 hover:bg-neutral-750 rounded-lg transition-colors"
+                  className="flex items-center gap-2 py-2 hover:opacity-80 transition-opacity"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-md font-semibold text-white">Advanced Configuration</span>
-                    <span className="text-xs text-gray-400 bg-neutral-700 px-2 py-1 rounded">Optional</span>
-                  </div>
                   <svg
-                    className={`w-5 h-5 text-gray-400 transition-transform ${showAdvancedConfig ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-gray-500 transition-transform ${showAdvancedConfig ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
+                  <span className="text-sm text-gray-400">Advanced Configuration</span>
                 </button>
 
                 {showAdvancedConfig && (
