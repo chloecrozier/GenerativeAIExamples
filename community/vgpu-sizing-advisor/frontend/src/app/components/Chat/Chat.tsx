@@ -18,7 +18,6 @@
 import { useState, useRef, useEffect } from "react";
 import RightSidebar from "../RightSidebar/RightSidebar";
 import VGPUConfigCard from "./VGPUConfigCard";
-import VGPUConfigDrawer from "./VGPUConfigDrawer";
 import WorkloadConfigWizard from "./WorkloadConfigWizard";
 import ApplyConfigurationForm from "./ApplyConfigurationForm";
 import { v4 as uuidv4 } from "uuid";
@@ -33,8 +32,7 @@ export default function Chat() {
   const { activePanel, toggleSidebar, setActiveCitations } = useSidebar();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [drawerConfig, setDrawerConfig] = useState<any>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [isApplyFormOpen, setIsApplyFormOpen] = useState(false);
   const [applyFormConfig, setApplyFormConfig] = useState<any>(null);
   const { streamState, processStream, startStream, resetStream, stopStream } =
@@ -123,7 +121,7 @@ export default function Chat() {
     }
   };
 
-  const renderMessageContent = (content: string, isTyping: boolean) => {
+  const renderMessageContent = (content: string, isTyping: boolean, messageId: string) => {
     if (isTyping) {
       return (
         <div className="flex items-center space-x-3">
@@ -137,7 +135,10 @@ export default function Chat() {
     if (isVGPUConfig(content)) {
       try {
         const vgpuConfig = JSON.parse(content.trim());
-        // Return a preview card that opens the drawer
+        const configId = messageId;
+        const isExpanded = expandedConfigId === configId;
+        
+        // Return a preview card with inline expandable details
         return (
           <div className="bg-neutral-800 border border-[#76b900]/30 rounded-lg p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -147,7 +148,13 @@ export default function Chat() {
               <h3 className="text-white font-semibold text-lg">vGPU Configuration Ready</h3>
             </div>
             
-            <p className="text-sm text-gray-300 mb-4">{vgpuConfig.description}</p>
+            <p className="text-sm text-gray-300 mb-4">
+              {vgpuConfig.description.split(/(Inference|RAG|inference|rag)/gi).map((part: string, i: number) => 
+                /^(Inference|RAG|inference|rag)$/i.test(part) ? (
+                  <span key={i} className="font-bold text-[#76b900]">{part}</span>
+                ) : part
+              )}
+            </p>
             
             {(vgpuConfig.parameters.vgpu_profile || vgpuConfig.parameters.vGPU_profile) && (
               <div className="flex items-center gap-4 text-sm mb-4">
@@ -163,19 +170,25 @@ export default function Chat() {
               </div>
             )}
             
-            {/* Configuration Details Button */}
+            {/* Configuration Details Toggle Button */}
             <button
               onClick={() => {
-                setDrawerConfig(vgpuConfig);
-                setIsDrawerOpen(true);
+                setExpandedConfigId(isExpanded ? null : configId);
               }}
               className="w-full px-4 py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mb-3"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-              Configuration Details
+              {isExpanded ? 'Hide' : 'Show'} Configuration Details
             </button>
+            
+            {/* Inline Configuration Details */}
+            {isExpanded && (
+              <div className="mb-3 animate-in fade-in duration-200">
+                <VGPUConfigCard config={vgpuConfig} />
+              </div>
+            )}
             
             {/* Verify Configuration Button */}
             <div>
@@ -372,9 +385,9 @@ export default function Chat() {
                     >
                       <div className="text-sm">
                         {msg.content
-                          ? renderMessageContent(msg.content, false)
+                          ? renderMessageContent(msg.content, false, msg.id)
                           : msg.role === "assistant" && streamState.isTyping
-                            ? renderMessageContent("", true)
+                            ? renderMessageContent("", true, msg.id)
                             : ""}
                       </div>
                       {msg.citations && (
@@ -420,13 +433,6 @@ export default function Chat() {
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
         onSubmit={handleWizardSubmit}
-      />
-
-      {/* vGPU Configuration Drawer */}
-      <VGPUConfigDrawer
-        config={drawerConfig}
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
       />
 
       {/* Apply Configuration Form Modal */}

@@ -115,7 +115,7 @@ chat_template: |
     You will respond with structured data in this exact format:
     - title: Always "generate_vgpu_config"  
     - description: 
-      * For valid configurations: Explain how the recommended vGPU configuration addresses the user's requirements with technical feasibility confirmation
+      * For valid configurations: Emphasize this is for **LLM Inference** or **RAG workloads**. Explain how the recommended vGPU configuration addresses the user's inference/RAG requirements with technical feasibility confirmation
       * For infeasible configurations: Include memory calculation showing why it doesn't fit on single GPU
       * For impossible configurations: Explain why the configuration is not feasible and suggest alternatives (smaller models, different hardware, quantization, etc.)
       * For irrelevant queries: State "This query is not relevant to vGPU configuration. No vGPU recommendations provided."
@@ -155,9 +155,9 @@ chat_template: |
     - **Feasibility Check**: Confirm model fits on single GPU or explain why not
 
     **Required Reasoning:**
-    Your description must explain the technical rationale for each parameter choice, including:
-    - Why you selected the specific vGPU profile for the user's GPU model
-    - How you calculated the memory requirements
+    Your description must emphasize this is for **LLM Inference** or **RAG workloads** and explain the technical rationale for each parameter choice, including:
+    - Why you selected the specific vGPU profile for the user's GPU model and inference workload
+    - How you calculated the memory requirements for inference/RAG operations
     - Why configuration is infeasible (if applicable) with specific calculations
     - Technical feasibility confirmation with specific reference to context specifications
 
@@ -219,7 +219,7 @@ nemotron_thinking_prompt: |
         **Response Format Requirements:**
         You MUST respond with a structured JSON configuration including:
         - title: Always "generate_vgpu_config"
-        - description: Detailed explanation of the recommendation (including why it's infeasible if model doesn't fit)
+        - description: Detailed explanation emphasizing this is for **LLM Inference** or **RAG workloads** (including why it's infeasible if model doesn't fit)
         - parameters: A JSON object with EXACTLY these field names (case-sensitive):
           * vgpu_profile: String - Exact vGPU profile name (e.g., "L40S-24Q")
           * vcpu_count: Integer - Virtual CPUs for VM
@@ -380,7 +380,7 @@ rag_template: |
 
     You will respond with structured data including:
     - title: Always "generate_vgpu_config"
-    - description: Complete explanation including memory calculation
+    - description: Complete explanation emphasizing **LLM Inference** or **RAG workload**, including memory calculation
     - parameters: A JSON object with EXACTLY these field names (case-sensitive):
       * vgpu_profile: String - Exact vGPU profile name (e.g., "L40S-24Q")
       * vcpu_count: Integer - Virtual CPUs for VM
@@ -477,10 +477,10 @@ reflection_response_regeneration_prompt:
     You are an expert NVIDIA vGPU configuration specialist. Generate a grounded vGPU configuration description
     based ONLY on information explicitly found in the provided context documents.
     
-    Your description should explain:
-    1. The recommended vGPU profile(s) and why they're suitable
+    Your description should emphasize this is for **LLM Inference** or **RAG workloads** and explain:
+    1. The recommended vGPU profile(s) and why they're suitable for inference/RAG workloads
     2. Hardware specifications (CPU, memory, storage) based on context
-    3. Performance characteristics and user capacity
+    3. Performance characteristics and user capacity for inference operations
     4. Technical feasibility and constraints
     
     CRITICAL RULES:

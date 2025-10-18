@@ -476,17 +476,13 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
 
   return (
     <div className="bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden shadow-lg">
-      {/* Header with NVIDIA green gradient */}
-      <div className="bg-gradient-to-r from-[#76b900] to-[#5a8c00] text-white px-6 py-4">
+      {/* Header with controls */}
+      <div className="bg-neutral-800 border-b border-neutral-700 px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div>
-              <h3 className="text-lg font-semibold">vGPU Configuration Recommendation</h3>
-              <p className="text-sm text-green-100 mt-0.5 opacity-90">Optimized for your AI workload requirements</p>
-            </div>
             {vramUsage && vramUsage.numGPUs > 1 && (
-              <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
-                <span className="text-sm font-medium flex items-center gap-1.5">
+              <div className="px-3 py-1 bg-[#76b900]/20 backdrop-blur-sm rounded-full border border-[#76b900]/30">
+                <span className="text-sm font-medium flex items-center gap-1.5 text-[#76b900]">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                   </svg>
@@ -495,45 +491,9 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowRawJSON(!showRawJSON)}
-              className="p-2 hover:bg-white/10 rounded transition-colors"
-              title={showRawJSON ? "Show Visualization" : "Show JSON Code"}
-            >
-              {showRawJSON ? (
-                /* Chart/Graph icon when viewing JSON - click to see visualization */
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              ) : (
-                /* Code icon when viewing visualization - click to see JSON */
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-2 hover:bg-white/10 rounded transition-colors"
-              title={isExpanded ? "Minimize" : "Expand"}
-            >
-              {isExpanded ? (
-                /* Minus icon when expanded - click to minimize */
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                </svg>
-              ) : (
-                /* Plus icon when collapsed - click to expand */
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              )}
-            </button>
-          </div>
         </div>
         {copied && (
-          <div className="mt-2 text-sm text-green-100 flex items-center gap-1">
+          <div className="mt-2 text-sm text-green-400 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
@@ -545,32 +505,6 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
       {/* Content */}
       {isExpanded && (
         <div className="p-6">
-          {/* Description */}
-          {config.description && (
-            <div className="mb-6 p-5 bg-gradient-to-br from-[#76b900]/10 to-[#76b900]/5 rounded-lg border border-[#76b900]/20 backdrop-blur-sm">
-              <p className="text-gray-100 text-sm leading-relaxed">
-                {config.description}
-              </p>
-            </div>
-          )}
-
-          {/* Why this config section */}
-          {(config.rationale || isRelevantConfig) && (
-            <div className="mb-6 p-4 bg-blue-950/30 border border-blue-900/50 rounded-lg">
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <h4 className="text-blue-300 font-medium text-sm mb-1">Why this configuration?</h4>
-                  <p className="text-blue-200/80 text-sm">
-                    {config.rationale || "This configuration balances performance and resource efficiency for your specific AI workload, ensuring optimal GPU utilization while maintaining cost-effectiveness."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Host Capabilities Context */}
           {config.host_capabilities && (
             <div className="mb-6 p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg">
@@ -605,42 +539,81 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
             </div>
           )}
 
-          {/* Raw JSON View */}
-          <div className={`relative bg-black rounded-lg p-4 overflow-x-auto border border-neutral-800 ${showRawJSON ? '' : 'hidden'}`}>
-            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap pr-12 pb-12">
-              {JSON.stringify(config, null, 2)}
-            </pre>
-            {/* Copy Button - Bottom Right */}
-            <button
-              onClick={handleCopy}
-              className="absolute bottom-3 right-3 p-2 bg-neutral-800 hover:bg-neutral-700 rounded transition-colors border border-neutral-600"
-              title={copied ? "Copied!" : "Copy JSON"}
-            >
-              {copied ? (
-                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              )}
-            </button>
-          </div>
-          
-          {/* Structured Configuration View */}
-          <div className={`space-y-6 ${showRawJSON ? 'hidden' : ''}`}>
-              {/* VRAM Usage Chart - Moved to top before Key Parameters */}
+          <div className="space-y-6">
+              {/* VRAM Usage Chart / JSON View */}
               {vramUsage && (
-                <div className="bg-gradient-to-br from-neutral-850/50 to-neutral-900/50 rounded-lg p-8 border border-neutral-700/60 shadow-inner">
+                <div className="bg-gradient-to-br from-neutral-850/50 to-neutral-900/50 rounded-lg p-8 border border-neutral-700/60 shadow-inner relative">
+                  {/* Header - Always visible */}
+                  <div className="flex items-center justify-between mb-8">
+                    <h4 className="text-white font-semibold text-base uppercase tracking-wider flex items-center gap-2">
+                      <svg className="w-5 h-5 text-[#76b900]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      VRAM Utilization Analysis
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      {/* Question mark with tooltip */}
+                      {(config.rationale || isRelevantConfig) && (
+                        <div className="relative group">
+                          <button className="w-5 h-5 rounded-full border border-gray-500 flex items-center justify-center text-[11px] font-semibold text-gray-400 hover:text-gray-300 hover:border-gray-400 transition-colors cursor-help">
+                            ?
+                          </button>
+                          <div className="absolute right-0 top-8 w-80 p-3 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                            <p className="text-xs text-gray-300 leading-relaxed">
+                              {config.rationale || "This configuration balances performance and resource efficiency for your specific AI workload, ensuring optimal GPU utilization while maintaining cost-effectiveness."}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {/* Code toggle button */}
+                      <button
+                        onClick={() => setShowRawJSON(!showRawJSON)}
+                        className="p-2 hover:bg-neutral-700 rounded transition-colors text-gray-400 hover:text-white"
+                        title={showRawJSON ? "Show Visualization" : "Show JSON Code"}
+                      >
+                        {showRawJSON ? (
+                          /* Chart/Graph icon when viewing JSON - click to see visualization */
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                        ) : (
+                          /* Code icon when viewing visualization - click to see JSON */
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Raw JSON View */}
+                  {showRawJSON ? (
+                    <div className="bg-black rounded-lg p-4 overflow-x-auto border border-neutral-800 relative">
+                      <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap pr-16 pb-12">
+                        {JSON.stringify(config, null, 2)}
+                      </pre>
+                      {/* Copy button - bottom right (JSON view only) */}
+                      <button
+                        onClick={handleCopy}
+                        className="absolute bottom-4 right-4 p-2 bg-neutral-800 hover:bg-neutral-700 rounded transition-colors border border-neutral-600"
+                        title={copied ? "Copied!" : "Copy JSON"}
+                      >
+                        {copied ? (
+                          <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    /* Visualization view */
+                    <>
                   <div className="grid md:grid-cols-2 gap-10 items-center">
                     <div>
-                      <h4 className="text-white font-semibold text-base mb-8 uppercase tracking-wider flex items-center gap-2">
-                        <svg className="w-5 h-5 text-[#76b900]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        VRAM Utilization Analysis
-                      </h4>
                       <VRAMUsageChart 
                         usedVRAM={vramUsage.used} 
                         totalVRAM={vramUsage.total}
@@ -688,6 +661,8 @@ export default function VGPUConfigCard({ config }: VGPUConfigCardProps) {
                       </div>
                     </div>
                   </div>
+                    </>
+                  )}
                 </div>
               )}
 

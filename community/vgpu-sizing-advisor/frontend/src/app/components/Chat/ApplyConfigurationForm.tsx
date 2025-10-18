@@ -68,6 +68,7 @@ export default function ApplyConfigurationForm({
   const [currentDisplayMessage, setCurrentDisplayMessage] = useState("");
   const [testMetrics, setTestMetrics] = useState<any>(null);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
 
   // Validate IP address format
   const validateIpAddress = (ip: string): boolean => {
@@ -136,6 +137,9 @@ export default function ApplyConfigurationForm({
                    configData?.parameters?.model_tag ||
                    configData?.parameters?.model_name ||
                    'Qwen/Qwen2.5-0.5B-Instruct';  // Default to an open-access model
+      
+      // Store the model for display in loading message
+      setCurrentModel(model);
       
       // Always deploy locally
       const payload: any = {
@@ -485,13 +489,26 @@ export default function ApplyConfigurationForm({
                 <label htmlFor="huggingFaceToken" className="text-sm font-medium text-gray-300">
                   Hugging Face Token
                 </label>
-                <div className="group relative">
-                  <svg className="h-4 w-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-800 border border-neutral-600 rounded-lg text-sm text-gray-300 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    Used for model downloads from Hugging Face
-                  </div>
+              </div>
+              <div className="mb-2 flex items-start gap-2 text-xs text-gray-400">
+                <svg className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="leading-relaxed">
+                    Used for model downloads. Ensure you have access to gated models.{' '}
+                    <a
+                      href="https://huggingface.co/settings/tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-400 hover:text-green-300 underline inline-flex items-center gap-0.5"
+                    >
+                      Create token
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </p>
                 </div>
               </div>
               <div className="relative">
@@ -554,10 +571,19 @@ export default function ApplyConfigurationForm({
                 </h3>
                 <Spinner />
                 <p className="text-sm text-gray-400 mt-4">
-                  Setting up vLLM container on this machine...
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  Model download and initialization may take 5-10 minutes on first run
+                  Setting up vLLM container running{' '}
+                  {currentModel && (
+                    <a
+                      href={`https://huggingface.co/${currentModel}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-400 hover:text-green-300 underline"
+                    >
+                      {currentModel}
+                    </a>
+                  )}
+                  {!currentModel && <span className="text-green-400">model</span>}
+                  {' '}on this machine
                 </p>
                 {currentDisplayMessage && (
                   <div className="mt-4 p-3 bg-neutral-800 rounded-lg border border-neutral-600">
@@ -680,8 +706,12 @@ export default function ApplyConfigurationForm({
                             // Determine log styling based on content
                             let className = "text-gray-300 text-sm leading-relaxed break-words";
                             
+                            // Status line (e.g., "Status: Deployment Successful") - larger and more prominent
+                            if (log.includes("Status:")) {
+                              className = "text-emerald-500 font-bold text-lg mt-6 mb-3 break-words tracking-wide text-center";
+                            }
                             // Subsection headers (Workload details, System details, etc.)
-                            if (log.trim().endsWith(":") && !log.startsWith("•")) {
+                            else if (log.trim().endsWith(":") && !log.startsWith("•")) {
                               className = "text-emerald-400 font-bold text-base mt-5 mb-2 break-words tracking-wide";
                             }
                             // Bullet points - enhanced with better color and spacing
