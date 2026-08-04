@@ -604,11 +604,20 @@ def del_docs_vectorstore_langchain(vectorstore: VectorStore, filenames: List[str
     """Delete documents from the vector index implemented in LangChain."""
 
     settings = get_config()
-    upload_folder = f"/tmp-data/uploaded_files/{collection_name}"
+    # Keep collection segment as a single path component to avoid traversal in source metadata keys
+    safe_collection = os.path.basename(collection_name or "")
+    if not safe_collection or safe_collection in {".", ".."} or "/" in collection_name or "\\" in collection_name:
+        logger.error("Invalid collection_name for document deletion: %s", collection_name)
+        return False
+    upload_folder = f"/tmp-data/uploaded_files/{safe_collection}"
     deleted = False
     try:
         for filename in filenames:
-            source_value =  os.path.join(upload_folder, filename)
+            safe_filename = os.path.basename(filename)
+            if not safe_filename or safe_filename in {".", ".."}:
+                logger.error("Invalid filename for document deletion: %s", filename)
+                return False
+            source_value = os.path.join(upload_folder, safe_filename)
             if settings.vector_store.name == "milvus":
                 # Delete Milvus Entities
                 resp = vectorstore.col.delete(f"source['source_name'] == '{source_value}'")

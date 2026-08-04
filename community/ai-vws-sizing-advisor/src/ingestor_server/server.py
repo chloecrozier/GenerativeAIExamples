@@ -20,7 +20,6 @@ import json
 import shutil
 from inspect import getmembers
 from inspect import isclass
-from pathlib import Path
 from typing import List, Dict, Any, Union
 from uuid import uuid4
 
@@ -38,6 +37,12 @@ from src.chains import UnstructuredRAG
 from src.utils import get_config
 from .main import NVIngestIngestor
 from .ingestion_task_handler import INGESTION_TASK_HANDLER
+from .path_security import (
+    UnsafePathError,
+    safe_collection_dir,
+    safe_upload_file_path,
+    validate_safe_name,
+)
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
 logger = logging.getLogger(__name__)
@@ -102,7 +107,8 @@ class DocumentUploadRequest(BaseModel):
 
     collection_name: str = Field(
         "multimodal_data",
-        description="Name of the collection in the vector database."
+        description="Name of the collection in the vector database.",
+        pattern=r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,254}$",
     )
 
     blocking: bool = Field(
@@ -289,11 +295,13 @@ async def upload_document(documents: List[UploadFile] = File(...),
     temp_dirs = []
 
     try:
-        base_upload_folder = Path(f"/tmp-data/uploaded_files/{request.collection_name}")
+        # Confine writes to UPLOAD_ROOT/<safe_collection>/ (blocks path traversal via collection_name)
+        base_upload_folder = safe_collection_dir(request.collection_name)
         base_upload_folder.mkdir(parents=True, exist_ok=True)
 
         for file in documents:
-            upload_file = os.path.basename(file.filename)
+            # Sanitize filename and resolve destination under the collection directory
+            file_path, upload_file = safe_upload_file_path(request.collection_name, file.filename)
 
             # Check for unsupported file formats (.rst, .rtf, etc.)
             not_supported_formats = ('.rst', '.rtf', '.org')
@@ -310,15 +318,11 @@ async def upload_document(documents: List[UploadFile] = File(...),
                 logger.info(dockerfile_instructions)
                 raise Exception(f"File format for {upload_file} is not supported.")
 
-            if not upload_file:
-                raise RuntimeError("Error parsing uploaded filename.")
-
             # Create a unique directory for each file
             unique_dir = base_upload_folder #/ str(uuid4())
             unique_dir.mkdir(parents=True, exist_ok=True)
             temp_dirs.append(unique_dir)
 
-            file_path = unique_dir / upload_file
             if not (hasattr(NV_INGEST_INGESTOR, "get_documents") and callable(NV_INGEST_INGESTOR.get_documents)):
                 raise NotImplementedError("Example class has not implemented get_documents method.")
 
@@ -364,6 +368,10 @@ async def upload_document(documents: List[UploadFile] = File(...),
     except asyncio.CancelledError as e:
         logger.warning(f"Request cancelled while uploading document {e}")
         return JSONResponse(content={"message": "Request was cancelled by the client"}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error from POST /documents endpoint. Ingestion of file failed with error: {e}")
         return JSONResponse(content={"message": f"Ingestion of files failed with error: {e}"}, status_code=500)
@@ -444,8 +452,10 @@ async def delete_and_upload_document(documents: List[UploadFile] = File(...),
     """Upload a document to the vector store. If the document already exists, it will be replaced."""
 
     try:
+        # Validate collection_name before any filesystem / VDB operations
+        validate_safe_name(request.collection_name, "collection_name")
         for file in documents:
-            file_name = os.path.basename(file.filename)
+            file_name = validate_safe_name(file.filename, "filename")
 
             # Delete the existing document
             if not (hasattr(NV_INGEST_INGESTOR, "delete_documents") and callable(NV_INGEST_INGESTOR.delete_documents)):
@@ -462,6 +472,10 @@ async def delete_and_upload_document(documents: List[UploadFile] = File(...),
     except asyncio.CancelledError as e:
         logger.error(f"Request cancelled while deleting and uploading document")
         return JSONResponse(content={"message": "Request was cancelled by the client"}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error from PATCH /documents endpoint. Ingestion failed with error.")
         return JSONResponse(content={"message": f"Ingestion of files failed with error. {e}"}, status_code=500)
@@ -501,6 +515,7 @@ async def get_documents(
 ) -> DocumentListResponse:
     """Get list of document ingested in vectorstore."""
     try:
+        collection_name = validate_safe_name(collection_name, "collection_name")
         if hasattr(NV_INGEST_INGESTOR, "get_documents") and callable(NV_INGEST_INGESTOR.get_documents):
             documents = NV_INGEST_INGESTOR.get_documents(collection_name, vdb_endpoint)
             return DocumentListResponse(**documents)
@@ -509,6 +524,10 @@ async def get_documents(
     except asyncio.CancelledError as e:
         logger.warning(f"Request cancelled while fetching documents. {str(e)}")
         return JSONResponse(content={"message": "Request was cancelled by the client."}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error from GET /documents endpoint. Error details: %s", e)
         return JSONResponse(content={"message": f"Error occurred while fetching documents: {e}"}, status_code=500)
@@ -544,6 +563,8 @@ async def get_documents(
 async def delete_documents(_: Request, document_names: List[str] = [], collection_name: str = os.getenv("COLLECTION_NAME"), vdb_endpoint: str = Query(default=os.getenv("APP_VECTORSTORE_URL"), include_in_schema=False)) -> DocumentListResponse:
     """Delete a document from vectorstore."""
     try:
+        collection_name = validate_safe_name(collection_name, "collection_name")
+        document_names = [validate_safe_name(name, "document_name") for name in document_names]
         if hasattr(NV_INGEST_INGESTOR, "delete_documents") and callable(NV_INGEST_INGESTOR.delete_documents):
             response = NV_INGEST_INGESTOR.delete_documents(document_names=document_names, document_ids=[], collection_name=collection_name, vdb_endpoint=vdb_endpoint)
             return DocumentListResponse(**response)
@@ -553,6 +574,10 @@ async def delete_documents(_: Request, document_names: List[str] = [], collectio
     except asyncio.CancelledError as e:
         logger.warning(f"Request cancelled while deleting document:, {document_names}, {str(e)}")
         return JSONResponse(content={"message": "Request was cancelled by the client."}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error from DELETE /documents endpoint. Error details: %s", e)
         return JSONResponse(content={"message": f"Error deleting document {document_names}: {e}"}, status_code=500)
@@ -642,6 +667,7 @@ async def create_collections(
     Returns status message.
     """
     try:
+        collection_names = [validate_safe_name(name, "collection_name") for name in collection_names]
         if hasattr(NV_INGEST_INGESTOR, "create_collections") and callable(NV_INGEST_INGESTOR.create_collections):
             response = NV_INGEST_INGESTOR.create_collections(collection_names, vdb_endpoint, embedding_dimension, collection_type)
             return CollectionResponse(**response)
@@ -650,6 +676,10 @@ async def create_collections(
     except asyncio.CancelledError as e:
         logger.warning(f"Request cancelled while fetching collections. {str(e)}")
         return JSONResponse(content={"message": "Request was cancelled by the client."}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error from POST /collections endpoint. Error details: %s", e)
         return JSONResponse(content={"message": f"Error occurred while creating collections. Error: {e}"}, status_code=500)
@@ -688,6 +718,7 @@ async def delete_collections(vdb_endpoint: str = Query(default=os.getenv("APP_VE
     Returns status message.
     """
     try:
+        collection_names = [validate_safe_name(name, "collection_name") for name in collection_names]
         if hasattr(NV_INGEST_INGESTOR, "delete_collections") and callable(NV_INGEST_INGESTOR.delete_collections):
             response = NV_INGEST_INGESTOR.delete_collections(collection_names, vdb_endpoint)
             return CollectionResponse(**response)
@@ -696,6 +727,10 @@ async def delete_collections(vdb_endpoint: str = Query(default=os.getenv("APP_VE
     except asyncio.CancelledError as e:
         logger.warning(f"Request cancelled while fetching collections. {str(e)}")
         return JSONResponse(content={"message": "Request was cancelled by the client."}, status_code=499)
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error from DELETE /collections endpoint. Error details: %s", e)
         return JSONResponse(content={"message": f"Error occurred while deleting collections. Error: {e}"}, status_code=500)

@@ -2,6 +2,10 @@
 All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [2.5] - 2026-08-04
+
+### Security
+- **Path traversal fix (NVBug 6553697)** — POST/PATCH `/documents` no longer allows arbitrary filesystem writes via malicious `collection_name` or filename values. Uploads are confined to `INGESTOR_UPLOAD_ROOT` with strict collection-name validation and resolved-path checks.
 
 ## [2.3] - 2026-01-08
 

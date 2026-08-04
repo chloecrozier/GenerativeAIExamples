@@ -193,6 +193,15 @@ curl -X POST -F "file=@./vgpu_docs/your-document.pdf" http://localhost:8082/v1/i
 
 ---
 
+## Security Notes
+
+This is a local development / demo example. Do not expose the ingestor (`:8082`) or RAG APIs to untrusted networks.
+
+- Document uploads are confined to `INGESTOR_UPLOAD_ROOT` (default `/tmp-data/uploaded_files`).
+- `collection_name` values are validated as single path segments; path-traversal sequences are rejected (NVBug 6553697).
+
+---
+
 ## License
 
 Licensed under the Apache License, Version 2.0.
