@@ -605,8 +605,9 @@ def del_docs_vectorstore_langchain(vectorstore: VectorStore, filenames: List[str
 
     settings = get_config()
     # Keep collection segment as a single path component to avoid traversal in source metadata keys
-    safe_collection = os.path.basename(collection_name or "")
-    if not safe_collection or safe_collection in {".", ".."} or "/" in collection_name or "\\" in collection_name:
+    raw_collection = (collection_name or "").strip()
+    safe_collection = os.path.basename(raw_collection)
+    if not safe_collection or safe_collection in {".", ".."} or "/" in raw_collection or "\\" in raw_collection:
         logger.error("Invalid collection_name for document deletion: %s", collection_name)
         return False
     upload_folder = f"/tmp-data/uploaded_files/{safe_collection}"
